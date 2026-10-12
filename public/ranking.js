@@ -1,6 +1,6 @@
 // Video Ranking: rank up to 7 videos into one countdown video with a live phone preview.
 import { $, $$, app, esc, fmtTime, api, toast, getStatus, getVoices, voiceOptions, onCleanup, poll } from './core.js';
-import { makeRich, setRich, colorSelection, serialize, richHTML, plainText, paletteHTML, syncPalette } from './richtext.js';
+import { makeRich, setRich, colorSelection, serialize, richHTML, plainText, paletteHTML, syncPalette, insertAtCaret, EMOJIS } from './richtext.js';
 
 const DEFAULT_EXTRAS = { rankPop: true, transition: 'flash', sfx: true, announce: false, announceVoice: '', musicVolume: 0.15, watermark: '', markColor: '#ffffff', endText: '', endColor: '#ffffff', endDuration: 2.5 };
 
@@ -24,6 +24,7 @@ const I = {
   trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   arrow: '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
   chevron: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
   alignL: '<svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg>',
   alignC: '<svg viewBox="0 0 24 24"><path d="M4 6h16M7 10h10M4 14h16M7 18h10"/></svg>',
   alignR: '<svg viewBox="0 0 24 24"><path d="M4 6h16M10 10h10M4 14h16M10 18h10"/></svg>',
@@ -121,6 +122,7 @@ export async function viewRankingEditor(id) {
   const fontOptions = (sel) => fonts.map((f) => `<option value="${esc(f.family)}" style="font-family:'${esc(f.family)}'" ${f.family === sel ? 'selected' : ''}>${esc(f.family)}</option>`).join('');
   const sizeOptions = (sel) => SIZES.map((n) => `<option value="${n}" ${n === sel ? 'selected' : ''}>${n}px</option>`).join('');
   const swatch = (bind, value) => `<label class="swatch" style="background:${esc(value)}"><input type="color" data-bind="${bind}" value="${esc(value)}" /></label>`;
+  const emojiButton = (target) => `<button type="button" class="btn sm emoji-btn" data-emoji-for="${esc(target)}" title="Insert an emoji at the cursor">😀 Emoji</button>`;
   const toggle = (bind, checked, label) => `<label class="toggle-row"><span class="switch"><input type="checkbox" data-bind="${bind}" ${checked ? 'checked' : ''} /><span></span></span>${label}</label>`;
 
   app.innerHTML = `
@@ -150,7 +152,7 @@ export async function viewRankingEditor(id) {
             </div>
             <div class="title-edit rich" id="titleText"></div>
             <div class="color-grid">
-              <div class="cfield"><span class="label">Text color <span class="hint">· select words first to color only them</span></span>${paletteHTML('title', R.title.color)}</div>
+              <div class="cfield"><span class="label">Text color <span class="hint">· select words first to color only them</span></span><div class="row" style="gap:10px">${paletteHTML('title', R.title.color)}${emojiButton('title')}</div></div>
               <div class="cfield"><span class="label">Outline color</span>${paletteHTML('title.strokeColor', R.title.strokeColor)}</div>
               <div class="cfield"><span class="label">Background box <button class="btn sm" id="bgNone" style="margin-left:6px">None</button></span>${paletteHTML('title.bg', R.title.bg || '#000000')}</div>
             </div>
@@ -175,6 +177,13 @@ export async function viewRankingEditor(id) {
               <span class="label">Outline thickness</span>
               <div class="slider-box" style="max-width:460px"><input type="range" min="0" max="6" step="0.5" data-bind="ranks.strokeWidth" data-num value="${R.ranks.strokeWidth}" /><output data-out="ranks.strokeWidth">${R.ranks.strokeWidth}</output></div>
             </div>
+            <div class="stack" style="gap:8px">
+              <span class="label">How long labels stay on screen</span>
+              <div class="row" style="gap:10px">
+                <div class="seg" id="labelModeSeg"><button data-v="stay">Until the end</button><button data-v="during">Only while its clip plays</button><button data-v="seconds">For a few seconds</button></div>
+                <div class="input-box" id="labelSecsBox" style="width:130px"><input type="number" min="0.5" max="30" step="0.5" data-bind="ranks.labelSeconds" data-num value="${R.ranks.labelSeconds ?? 3}" /><span class="unit">sec</span></div>
+              </div>
+            </div>
             <span class="muted small">Tip: drag the rank list in the preview to move it. Each label appears when its video starts playing.</span>
           </section>
 
@@ -182,7 +191,7 @@ export async function viewRankingEditor(id) {
             <div class="panel-head"><h2>General Setting</h2></div>
             <div class="two">
               <div class="stack" style="gap:8px"><span class="label">Video height</span><div class="input-box"><input type="number" min="20" max="100" data-bind="general.videoHeight" data-num value="${R.general.videoHeight}" /><span class="unit">%</span></div></div>
-              <div class="stack" style="gap:8px"><span class="label">Background</span><div class="input-box">${swatch('general.background', R.general.background)}<input type="text" data-bind="general.background" data-hex value="${esc(R.general.background)}" /></div></div>
+              <div class="stack" style="gap:8px"><span class="label">Background color <span class="hint">· behind the video</span></span>${paletteHTML('general.background', R.general.background)}</div>
               <div class="stack" style="gap:8px"><span class="label">Target video length</span><div class="input-box"><select data-bind="general.targetLength" data-num>${(TARGETS.some(([v]) => v === R.general.targetLength) ? TARGETS : [...TARGETS, [R.general.targetLength, `${R.general.targetLength} seconds`]].sort((a, b) => a[0] - b[0])).map(([v, l]) => `<option value="${v}" ${v === R.general.targetLength ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
               <div class="stack" style="gap:8px"><span class="label">Video fit</span><div class="seg" id="fitSeg"><button data-v="cover">Fill</button><button data-v="contain">Fit whole video</button></div></div>
             </div>
@@ -226,10 +235,11 @@ export async function viewRankingEditor(id) {
             </div>
             <div class="two">
               <div class="cfield"><label class="field">Watermark<input type="text" data-bind="extras.watermark" value="${esc(R.extras.watermark)}" placeholder="@yourchannel" maxlength="40" /></label>${paletteHTML('extras.markColor', R.extras.markColor || '#ffffff')}</div>
-              <div class="cfield"><span class="label">End screen text <span class="hint">· select words to color them</span></span><div class="rich" id="endText"></div>${paletteHTML('end', R.extras.endColor || '#ffffff')}</div>
+              <div class="cfield"><span class="label">End screen text <span class="hint">· select words to color them</span></span><div class="rich" id="endText"></div><div class="row" style="gap:10px">${paletteHTML('end', R.extras.endColor || '#ffffff')}${emojiButton('end')}</div></div>
             </div>
           </section>
 
+          <div class="spread" id="itemsHead"><h2>Ranked videos</h2><button class="btn sm ghost danger" id="removeAll">🗑 Remove all videos</button></div>
           <div class="stack" id="items" style="gap:14px"></div>
         </div>
         <div class="render-bar" id="renderBar"></div>
@@ -280,6 +290,8 @@ export async function viewRankingEditor(id) {
     $$('[data-align]').forEach((b) => b.classList.toggle('on', R.title.align === b.dataset.align));
     $$('#fitSeg button').forEach((b) => b.classList.toggle('selected', R.general.fit === b.dataset.v));
     $$('#orderSeg button').forEach((b) => b.classList.toggle('selected', R.playback.order === b.dataset.v));
+    $$('#labelModeSeg button').forEach((b) => b.classList.toggle('selected', (R.ranks.labelMode || 'stay') === b.dataset.v));
+    $('#labelSecsBox').hidden = R.ranks.labelMode !== 'seconds';
     $('#bgNone').classList.toggle('on', !R.title.bg);
     $('#bgNone').textContent = R.title.bg ? 'Remove' : 'None';
     $('#capStyle').hidden = !R.general.captions;
@@ -301,6 +313,48 @@ export async function viewRankingEditor(id) {
     // No background box: don't show any color as selected.
     if (!R.title.bg) $$('.palette[data-target="title.bg"] .dot.on').forEach((d) => d.classList.remove('on'));
   }
+
+  // ---------- Emoji picker ----------
+
+  const richBoxFor = (target) => (target === 'title' ? $('#titleText') : target === 'end' ? $('#endText') : $(`[data-label="${target.slice(6)}"]`));
+  function openEmojiPicker(btn) {
+    $('.emoji-pop')?.remove();
+    const pop = document.createElement('div');
+    pop.className = 'emoji-pop';
+    pop.innerHTML = EMOJIS.map((e) => `<button type="button" data-emo="${e}">${e}</button>`).join('');
+    document.body.appendChild(pop);
+    const r = btn.getBoundingClientRect();
+    pop.style.left = `${Math.min(window.innerWidth - pop.offsetWidth - 12, r.left)}px`;
+    pop.style.top = `${r.bottom + 6 + window.scrollY}px`;
+    // Keep the caret in the text box while picking.
+    pop.addEventListener('mousedown', (e) => e.preventDefault());
+    pop.addEventListener('click', (e) => {
+      const emo = e.target.closest('[data-emo]')?.dataset.emo;
+      const box = richBoxFor(btn.dataset.emojiFor);
+      if (emo && box) insertAtCaret(box, emo);
+    });
+    const close = (e) => {
+      if (!pop.contains(e.target) && e.target !== btn) {
+        pop.remove();
+        document.removeEventListener('mousedown', close);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', close));
+    onCleanup(() => pop.remove());
+  }
+  const onEmojiBtn = (e) => {
+    const btn = e.target.closest('[data-emoji-for]');
+    if (btn) openEmojiPicker(btn);
+  };
+  const onEmojiDown = (e) => {
+    if (e.target.closest('[data-emoji-for]')) e.preventDefault(); // don't steal the caret from the text box
+  };
+  app.addEventListener('click', onEmojiBtn);
+  app.addEventListener('mousedown', onEmojiDown);
+  onCleanup(() => {
+    app.removeEventListener('click', onEmojiBtn);
+    app.removeEventListener('mousedown', onEmojiDown);
+  });
 
   // ---------- Colors ----------
 
@@ -384,7 +438,7 @@ export async function viewRankingEditor(id) {
 
   // ---------- Undo / redo (settings, labels and rank order) ----------
 
-  const snapshot = () => JSON.stringify({ title: R.title, general: R.general, ranks: R.ranks, playback: R.playback, extras: R.extras, items: R.items.map((it) => [it.id, it.label || '', it.color || '']) });
+  const snapshot = () => JSON.stringify({ title: R.title, general: R.general, ranks: R.ranks, playback: R.playback, extras: R.extras, items: R.items.map((it) => [it.id, it.label || '', it.color || '', it.font || '']) });
   const history = [snapshot()];
   let hPos = 0;
   let hTimer;
@@ -408,9 +462,9 @@ export async function viewRankingEditor(id) {
     const s0 = JSON.parse(snap);
     for (const k of ['title', 'general', 'ranks', 'playback', 'extras']) R[k] = s0[k];
     const byId = new Map(R.items.map((it) => [it.id, it]));
-    const ordered = s0.items.map(([iid, label, color]) => {
+    const ordered = s0.items.map(([iid, label, color, font]) => {
       const it = byId.get(iid);
-      if (it) Object.assign(it, { label, color: color || '' });
+      if (it) Object.assign(it, { label, color: color || '', font: font || '' });
       return it;
     }).filter(Boolean);
     R.items = [...ordered, ...R.items.filter((it) => !ordered.includes(it))];
@@ -534,6 +588,9 @@ export async function viewRankingEditor(id) {
     } else if (t.dataset.align) {
       R.title.align = t.dataset.align;
       changed();
+    } else if (t.id === 'removeAll') {
+      if (!confirm(`Remove all ${R.items.length} videos from this ranking? Your title, colors and other settings are kept.`)) return;
+      saving.then(() => api('DELETE', `/api/rankings/${id}/items`)).then(merge).catch((err) => toast(err.message, true));
     } else if (t.id === 'bgNone') {
       R.title.bg = '';
       changed();
@@ -542,6 +599,9 @@ export async function viewRankingEditor(id) {
       changed();
     } else if (t.closest('#orderSeg')) {
       R.playback.order = t.dataset.v;
+      changed();
+    } else if (t.closest('#labelModeSeg')) {
+      R.ranks.labelMode = t.dataset.v;
       changed();
     } else if (t.closest('#transSeg')) {
       R.extras.transition = t.dataset.v;
@@ -588,7 +648,7 @@ export async function viewRankingEditor(id) {
         playback: R.playback,
         extras: R.extras,
         items: R.items.map((it) => {
-          const x = { id: it.id, label: it.label || '', color: it.color || '' };
+          const x = { id: it.id, label: it.label || '', color: it.color || '', font: it.font || '' };
           if (ui.resetAuto.has(it.id)) x.auto = true;
           else if (ui.dirtyTrim.has(it.id)) Object.assign(x, { trimStart: it.trimStart, trimEnd: it.trimEnd });
           return x;
@@ -619,7 +679,7 @@ export async function viewRankingEditor(id) {
       const li = local.get(si.id);
       if (!li) return si;
       const keepTrim = ui.dirtyTrim.has(si.id) ? { trimStart: li.trimStart, trimEnd: li.trimEnd, auto: false } : {};
-      return { ...si, label: li.label || si.label, color: li.color ?? si.color, ...keepTrim };
+      return { ...si, label: li.label || si.label, color: li.color ?? si.color, font: li.font ?? si.font, ...keepTrim };
     });
     Object.assign(P, { status: fresh.status, step: fresh.step, progress: fresh.progress, error: fresh.error, output: fresh.output });
     if (R.items.map((i) => `${i.id}:${i.status}`).join() !== before) {
@@ -658,10 +718,25 @@ export async function viewRankingEditor(id) {
     if (it.status === 'processing' || it.status === 'analyzing') return '<div class="row small"><div class="spinner" style="width:18px;height:18px;border-width:2px"></div>Analyzing for the best moment…</div>';
     if (it.status === 'error') return `<div class="banner err small"><div>${esc(it.error || 'Something went wrong.')}</div></div>`;
     return `
-      <div class="stack" style="gap:8px">
-        <span class="label">Best moment <span class="muted" style="font-weight:450">(drag the yellow box or its edges to change it)</span></span>
-        <div class="moment" data-moment="${it.id}"><div class="bars"></div><div class="win"><div class="h l"></div><div class="h r"></div></div></div>
-        <div class="moment-info"><span data-info></span><span data-mode class="badge"></span><button class="btn sm" data-act="auto">↺ Auto-pick</button><button class="btn sm" data-act="play">▶ Preview</button></div>
+      <div class="trim">
+        <div class="trim-top"><span class="label">Trim</span><span class="small" data-info></span><span data-mode class="badge"></span></div>
+        <div class="moment" data-moment="${it.id}" title="Drag the yellow edges to trim · drag the middle to move · click elsewhere to jump the video there">
+          <div class="bars"></div>
+          <div class="win"><div class="h l" title="Drag to set the start"></div><div class="h r" title="Drag to set the end"></div></div>
+          <div class="ph"></div>
+        </div>
+        <div class="trim-row">
+          <label class="tfield">Start<input type="text" data-ts="start" /></label>
+          <button class="btn sm" data-act="setStart" title="Start at the frame showing in the video">⇤ Start here</button>
+          <label class="tfield">End<input type="text" data-ts="end" /></label>
+          <button class="btn sm" data-act="setEnd" title="End at the frame showing in the video">End here ⇥</button>
+        </div>
+        <div class="trim-row">
+          <button class="btn sm" data-act="playTrim">▶ Play trimmed part</button>
+          <button class="btn sm" data-act="whole">⤢ Whole clip</button>
+          <button class="btn sm" data-act="auto">↺ Auto-pick best moment</button>
+          <button class="btn sm ghost" data-act="play">📱 Play in phone preview</button>
+        </div>
         ${it.ai?.reason ? `<span class="small" style="color:#a9c0ff">🤖 AI saw: ${esc(it.ai.reason)} (payoff at ${fmtTime(it.ai.peak, true)})</span>` : ''}
       </div>`;
   }
@@ -675,16 +750,24 @@ export async function viewRankingEditor(id) {
           <div class="name">Video Rank ${i + 1}${plainText(it.label) ? ` <span class="muted" style="font-weight:450">· ${esc(plainText(it.label))}</span>` : ''}</div>
           <button class="icon-btn" data-act="up" title="Move up" ${i === 0 ? 'disabled' : ''}>${I.up}</button>
           <button class="icon-btn" data-act="down" title="Move down" ${i === n - 1 ? 'disabled' : ''}>${I.down}</button>
+          <button class="icon-btn" data-act="dup" title="Duplicate this rank" ${n >= MAX || it.status !== 'ready' ? 'disabled' : ''}>${I.copy}</button>
           <button class="icon-btn" data-act="del" title="Remove">${I.trash}</button>
         </div>
         <div class="rc-body">
-          <div class="rc-vid">${it.status === 'ready' ? `<video src="/files/${id}/${it.file}#t=${it.trimStart || 0}" muted preload="metadata" playsinline></video>` : ''}</div>
+          <div class="rc-vid-wrap">
+            <div class="rc-vid">${it.status === 'ready' ? `<video data-vid="${it.id}" src="/files/${id}/${it.file}" preload="metadata" playsinline title="Click to play / pause"></video><div class="vid-play">▶</div>` : ''}</div>
+            ${it.status === 'ready' ? `<div class="vid-time" data-vtime="${it.id}">0:00.0</div>` : ''}
+          </div>
           <div class="rc-fields">
             <div class="two" style="grid-template-columns:1fr 120px">
               <div class="field">Label next to #${i + 1} <span class="hint">· select words to color them</span><div class="rich" data-label="${it.id}"></div></div>
               <label class="field">Rank<select data-rank="${it.id}">${R.items.map((_, k) => `<option value="${k}" ${k === i ? 'selected' : ''}>#${k + 1}</option>`).join('')}</select></label>
             </div>
-            ${paletteHTML(`label:${it.id}`, it.color || R.ranks.labelColor)}
+            <div class="row" style="gap:10px;flex-wrap:wrap">
+              ${paletteHTML(`label:${it.id}`, it.color || R.ranks.labelColor)}
+              ${emojiButton(`label:${it.id}`)}
+              <select data-font="${it.id}" style="width:auto;padding:6px 10px;font-size:13px" title="Font for this rank's label"><option value="">Font: same as list</option>${fonts.map((f) => `<option value="${esc(f.family)}" ${f.family === it.font ? 'selected' : ''}>${esc(f.family)}</option>`).join('')}</select>
+            </div>
             ${statusBlock(it)}
             <span class="muted small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Source: ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noreferrer">${esc(it.url)}</a>` : esc(it.sourceName || '')}${it.duration ? ` · ${fmtTime(it.duration)}` : ''}</span>
           </div>
@@ -718,23 +801,27 @@ export async function viewRankingEditor(id) {
     for (const it of R.items) {
       const box = $(`[data-label="${it.id}"]`);
       if (!box) continue;
+      box.style.fontFamily = `"${it.font || R.ranks.font}", "Segoe UI Emoji"`;
       makeRich(box, {
         value: it.label || '',
         base: it.color || R.ranks.labelColor,
-        placeholder: 'e.g. Rooftop slip',
+        placeholder: 'e.g. Rooftop slip 😱',
         onChange: (markup) => {
-          it.label = markup;
+          // Look the rank up again: background refreshes replace the item objects.
+          const cur = R.items.find((x) => x.id === it.id);
+          if (!cur) return;
+          cur.label = markup;
           const name = $(`[data-id="${it.id}"] .name`);
           const plain = plainText(markup);
-          name.innerHTML = `Video Rank ${R.items.indexOf(it) + 1}${plain ? ` <span class="muted" style="font-weight:450">· ${esc(plain)}</span>` : ''}`;
+          name.innerHTML = `Video Rank ${R.items.indexOf(cur) + 1}${plain ? ` <span class="muted" style="font-weight:450">· ${esc(plain)}</span>` : ''}`;
           drawPreview();
           scheduleSave();
           recordHistory();
         },
       });
     }
-    $$('.rc-vid video', itemsBox).forEach((v) => v.addEventListener('mouseenter', () => v.play().catch(() => {})));
-    $$('.rc-vid video', itemsBox).forEach((v) => v.addEventListener('mouseleave', () => v.pause()));
+    wireRankVideos();
+    $('#removeAll').hidden = !R.items.length;
     $$('.palette', itemsBox).forEach((pal) => syncPalette(pal, paletteColor(pal.dataset.target)));
     if (focusLabel) {
       // Put the caret back at the end of the label being typed in.
@@ -775,12 +862,67 @@ export async function viewRankingEditor(id) {
     win.style.left = `${(it.trimStart / it.duration) * 100}%`;
     win.style.width = `${((it.trimEnd - it.trimStart) / it.duration) * 100}%`;
     const card = box.closest('.rank-card');
-    $('[data-info]', card).textContent = `${fmtTime(it.trimStart, true)} – ${fmtTime(it.trimEnd, true)} · ${itemLength(it).toFixed(1)}s`;
+    $('[data-info]', card).textContent = `${itemLength(it).toFixed(1)}s of ${it.duration.toFixed(1)}s`;
     const mode = $('[data-mode]', card);
     const auto = it.auto !== false;
-    mode.textContent = auto ? '✨ Auto best moment' : '✋ Manual';
+    mode.textContent = auto ? '✨ Auto best moment' : '✋ Trimmed by you';
     mode.className = `badge ${auto ? 'blue' : ''}`;
     $('[data-act="auto"]', card).hidden = auto;
+    // Keep the time boxes in sync unless the user is typing in them.
+    for (const [key, val] of [['start', it.trimStart], ['end', it.trimEnd]]) {
+      const input = $(`[data-ts="${key}"]`, card);
+      if (input && document.activeElement !== input) input.value = fmtTime(val, true);
+    }
+  }
+
+  // ---------- Per-rank video player (used for trimming) ----------
+
+  const vidOf = (itemId) => $(`video[data-vid="${itemId}"]`);
+  const playingTrim = new Set(); // items currently playing "trimmed part only"
+
+  function setPlayhead(it, t) {
+    const box = $(`[data-moment="${it.id}"]`);
+    const ph = box && $('.ph', box);
+    if (ph) ph.style.left = `${(Math.min(it.duration, Math.max(0, t)) / it.duration) * 100}%`;
+    const label = $(`[data-vtime="${it.id}"]`);
+    if (label) label.textContent = fmtTime(t, true);
+  }
+
+  /** Wire up each rank's video: click to play/pause, playhead follows, "play trimmed" stops at the end. */
+  function wireRankVideos() {
+    for (const it of R.items) {
+      const v = vidOf(it.id);
+      if (!v || v.dataset.wired) continue;
+      v.dataset.wired = '1';
+      v.addEventListener('loadedmetadata', () => {
+        v.currentTime = it.trimStart || 0;
+      });
+      v.addEventListener('timeupdate', () => {
+        const live = R.items.find((x) => x.id === it.id) || it;
+        setPlayhead(live, v.currentTime);
+        if (playingTrim.has(it.id) && v.currentTime >= live.trimEnd - 0.05) {
+          v.pause();
+          playingTrim.delete(it.id);
+          v.currentTime = live.trimEnd;
+        }
+      });
+      const playIcon = v.parentElement.querySelector('.vid-play');
+      v.addEventListener('play', () => playIcon && (playIcon.hidden = true));
+      v.addEventListener('pause', () => playIcon && (playIcon.hidden = false));
+      v.addEventListener('click', () => {
+        playingTrim.delete(it.id);
+        v.paused ? v.play().catch(() => {}) : v.pause();
+      });
+      playIcon?.addEventListener('click', () => v.play().catch(() => {}));
+    }
+  }
+
+  function playTrimmed(it) {
+    const v = vidOf(it.id);
+    if (!v) return;
+    playingTrim.add(it.id);
+    v.currentTime = it.trimStart;
+    v.play().catch(() => {});
   }
 
   function move(from, to) {
@@ -822,9 +964,42 @@ export async function viewRankingEditor(id) {
       ui.dirtyTrim.delete(itemId);
       save();
     } else if (act === 'play') playSequence([idx]);
+    else if (act === 'playTrim') playTrimmed(R.items[idx]);
+    else if (act === 'setStart' || act === 'setEnd') {
+      const it = R.items[idx];
+      const v = vidOf(it.id);
+      if (!v) return;
+      const t = v.currentTime;
+      if (act === 'setStart') setTrim(it, t, Math.max(it.trimEnd, t + MIN_LEN));
+      else setTrim(it, Math.min(it.trimStart, t - MIN_LEN), t);
+      save();
+      recordHistory();
+    } else if (act === 'whole') {
+      setTrim(R.items[idx], 0, R.items[idx].duration);
+      save();
+      recordHistory();
+    } else if (act === 'dup') {
+      await saving;
+      try {
+        merge(await api('POST', `/api/rankings/${id}/items/${itemId}/duplicate`));
+        toast(`Rank #${idx + 1} duplicated as #${idx + 2}.`);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    }
   });
 
   itemsBox.addEventListener('change', (e) => {
+    if (e.target.dataset.font !== undefined) {
+      const it = R.items.find((x) => x.id === e.target.dataset.font);
+      it.font = e.target.value;
+      const box = $(`[data-label="${it.id}"]`);
+      if (box) box.style.fontFamily = it.font ? `"${it.font}"` : '';
+      drawPreview();
+      save();
+      recordHistory();
+      return;
+    }
     if (e.target.dataset.rank) move(R.items.findIndex((x) => x.id === e.target.dataset.rank), Number(e.target.value));
     if (e.target.id === 'uploadIn') uploadFiles([...e.target.files]);
   });
@@ -840,23 +1015,28 @@ export async function viewRankingEditor(id) {
     }
   });
 
-  // Dragging the best-moment window.
+  // ---------- Trimming ----------
+  // Drag the yellow edges to set start/end (the video shows that exact frame while you drag),
+  // drag the middle to move the whole selection, click outside it to jump the video there.
+  const MIN_LEN = 0.5;
   let mdrag = null;
   itemsBox.addEventListener('pointerdown', (e) => {
     const box = e.target.closest('.moment');
     if (!box) return;
     const it = R.items.find((x) => x.id === box.dataset.moment);
+    if (!it?.duration) return;
     const rect = box.getBoundingClientRect();
     const toT = (x) => Math.min(it.duration, Math.max(0, ((x - rect.left) / rect.width) * it.duration));
     const t = toT(e.clientX);
-    const len = it.trimEnd - it.trimStart;
+    const v = vidOf(it.id);
+    v?.pause();
+    playingTrim.delete(it.id);
     if (e.target.classList.contains('h')) mdrag = { it, toT, kind: e.target.classList.contains('l') ? 'l' : 'r' };
-    else if (e.target.closest('.win')) mdrag = { it, toT, kind: 'move', offset: t - it.trimStart, len };
+    else if (e.target.closest('.win')) mdrag = { it, toT, kind: 'move', offset: t - it.trimStart, len: it.trimEnd - it.trimStart };
     else {
-      // Click outside the window: center it there.
-      const start = Math.min(Math.max(0, t - len / 2), it.duration - len);
-      setTrim(it, start, start + len);
-      mdrag = { it, toT, kind: 'move', offset: t - start, len };
+      if (v) v.currentTime = t;
+      setPlayhead(it, t);
+      mdrag = { it, toT, kind: 'seek' };
     }
     box.setPointerCapture(e.pointerId);
     e.preventDefault();
@@ -865,21 +1045,37 @@ export async function viewRankingEditor(id) {
     if (!mdrag) return;
     const { it, toT, kind } = mdrag;
     const t = toT(e.clientX);
-    if (kind === 'l') setTrim(it, Math.min(t, it.trimEnd - 1), it.trimEnd);
-    else if (kind === 'r') setTrim(it, it.trimStart, Math.max(t, it.trimStart + 1));
-    else {
+    const v = vidOf(it.id);
+    if (kind === 'l') {
+      setTrim(it, Math.min(t, it.trimEnd - MIN_LEN), it.trimEnd);
+      if (v) v.currentTime = it.trimStart;
+    } else if (kind === 'r') {
+      setTrim(it, it.trimStart, Math.max(t, it.trimStart + MIN_LEN));
+      if (v) v.currentTime = Math.max(0, it.trimEnd - 0.04);
+    } else if (kind === 'move') {
       const start = Math.min(Math.max(0, t - mdrag.offset), it.duration - mdrag.len);
       setTrim(it, start, start + mdrag.len);
+      if (v) v.currentTime = it.trimStart;
+    } else if (v) {
+      v.currentTime = t;
+      setPlayhead(it, t);
     }
   });
-  itemsBox.addEventListener('pointerup', () => {
+  const endDrag = () => {
     if (!mdrag) return;
-    const v = $(`[data-id="${mdrag.it.id}"] .rc-vid video`);
-    if (v) v.currentTime = mdrag.it.trimStart;
+    const wasTrim = mdrag.kind !== 'seek';
     mdrag = null;
-    save();
-  });
+    if (wasTrim) {
+      save();
+      recordHistory();
+    }
+  };
+  itemsBox.addEventListener('pointerup', endDrag);
+  itemsBox.addEventListener('pointercancel', endDrag);
+
   function setTrim(it, start, end) {
+    start = Math.max(0, Math.min(start, it.duration - MIN_LEN));
+    end = Math.min(it.duration, Math.max(end, start + MIN_LEN));
     it.trimStart = +start.toFixed(2);
     it.trimEnd = +end.toFixed(2);
     it.auto = false;
@@ -888,6 +1084,33 @@ export async function viewRankingEditor(id) {
     renderBar();
     updateTime();
   }
+
+  // Typing exact times: "12.5", "0:12.5" or "1:02".
+  const parseTime = (s) => {
+    const parts = String(s).trim().split(':').map(Number);
+    if (!parts.length || parts.some((n) => !Number.isFinite(n))) return NaN;
+    return parts.reduce((acc, n) => acc * 60 + n, 0);
+  };
+  itemsBox.addEventListener('change', (e) => {
+    const key = e.target.dataset?.ts;
+    if (!key) return;
+    const it = R.items.find((x) => x.id === e.target.closest('.rank-card')?.dataset.id);
+    const t = parseTime(e.target.value);
+    if (!it || !Number.isFinite(t)) {
+      if (it) updateMoment(it);
+      return toast('Type a time like 12.5 or 0:12.5', true);
+    }
+    if (key === 'start') setTrim(it, t, Math.max(it.trimEnd, t + MIN_LEN));
+    else setTrim(it, Math.min(it.trimStart, t - MIN_LEN), t);
+    const v = vidOf(it.id);
+    if (v) v.currentTime = key === 'start' ? it.trimStart : it.trimEnd - 0.04;
+    updateMoment(it);
+    save();
+    recordHistory();
+  });
+  itemsBox.addEventListener('keydown', (e) => {
+    if (e.target.dataset?.ts && e.key === 'Enter') e.target.blur();
+  });
 
   // ---------- Adding videos ----------
 
@@ -947,7 +1170,17 @@ export async function viewRankingEditor(id) {
 
   const canvas = $('#canvas');
   const pv = $('#pv');
-  const player = { playing: false, seq: [], k: 0, revealed: null, end: 0 };
+  const player = { playing: false, seq: [], k: 0, revealed: null, end: 0, startedAt: {} };
+  /** Is rank i's label on screen right now in the preview? (All labels show while idle.) */
+  function labelVisible(i) {
+    if (!player.revealed) return true;
+    if (!player.revealed.has(i)) return false;
+    const mode = R.ranks.labelMode || 'stay';
+    const current = player.seq[player.k];
+    if (mode === 'during') return i === current;
+    if (mode === 'seconds') return performance.now() - (player.startedAt[i] || 0) < (Number(R.ranks.labelSeconds) || 3) * 1000;
+    return true;
+  }
   const readyIdx = () => R.items.map((it, i) => (it.status === 'ready' ? i : -1)).filter((i) => i >= 0);
   const playOrder = () => {
     const idx = readyIdx();
@@ -1003,8 +1236,9 @@ export async function viewRankingEditor(id) {
     const count = Math.max(R.items.length, 1);
     rl.innerHTML = Array.from({ length: count }, (_, i) => {
       const it = R.items[i];
-      const show = it?.label && (!player.revealed || player.revealed.has(i));
-      return `<div style="height:${lh}px;line-height:${lh}px">${i + 1}.${show ? ` <span style="color:${esc(it.color || k.labelColor)}">${richHTML(it.label)}</span>` : ''}</div>`;
+      const show = plainText(it?.label).trim() && labelVisible(i);
+      const font = it?.font ? `font-family:'${esc(it.font)}';` : '';
+      return `<div style="height:${lh}px;line-height:${lh}px">${i + 1}.${show ? ` <span style="${font}color:${esc(it.color || k.labelColor)}">${richHTML(it.label)}</span>` : ''}</div>`;
     }).join('');
   }
 
@@ -1044,6 +1278,7 @@ export async function viewRankingEditor(id) {
     if (i === undefined) return stopPlay();
     const it = R.items[i];
     player.revealed.add(i);
+    player.startedAt[i] = performance.now();
     if (R.extras.rankPop) {
       const pop = $('#pvPop');
       pop.textContent = `#${i + 1}`;
@@ -1081,6 +1316,7 @@ export async function viewRankingEditor(id) {
   };
   pv.addEventListener('timeupdate', () => {
     if (player.playing && pv.currentTime >= player.end - 0.12) nextClip();
+    else if (player.playing && R.ranks.labelMode === 'seconds') drawPreview(); // labels time out mid-clip
     updateTime();
   });
   // A clip can end slightly before its listed length (common with TikTok files): move on instead of freezing.

@@ -66,7 +66,7 @@ document.addEventListener('selectionchange', () => {
   if (ed) saved = { el: ed, range: r.cloneRange() };
 });
 document.addEventListener('mousedown', (e) => {
-  if (!e.target.closest?.('[data-rich], .palette')) saved = null;
+  if (!e.target.closest?.('[data-rich], .palette, .emoji-pop, [data-emoji-for]')) saved = null;
 });
 
 /** Turn `el` into a colorable text box. onChange(markup) fires on every edit. */
@@ -108,6 +108,24 @@ export function colorSelection(el, hex) {
   el.dispatchEvent(new Event('input', { bubbles: true }));
   return true;
 }
+
+/** Insert text (e.g. an emoji) at the caret inside `el`, or at the end if the caret isn't there. */
+export function insertAtCaret(el, text) {
+  el.focus();
+  const sel = getSelection();
+  sel.removeAllRanges();
+  if (saved && saved.el === el) sel.addRange(saved.range);
+  else {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    sel.addRange(r);
+  }
+  document.execCommand('insertText', false, text);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+export const EMOJIS = ['🔥', '😂', '🤣', '😭', '💀', '😱', '🤯', '😳', '👀', '😎', '🥶', '😤', '🙌', '👏', '💪', '🏆', '🥇', '🥈', '🥉', '⭐', '💯', '✅', '❌', '⚠️', '❤️', '💔', '⚡', '🎯', '🚀', '💥', '🤡', '🐐', '👑', '💰', '🎉', '🙏', '🤔', '😬', '🫣', '👇'];
 
 /** A row of preset color dots plus a custom picker. `target` says what the color applies to. */
 export function paletteHTML(target, current) {

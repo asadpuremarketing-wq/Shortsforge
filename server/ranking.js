@@ -7,6 +7,7 @@ import { transcribe } from './transcribe.js';
 import { synthesize } from './tts.js';
 import { bestWindow } from './analyze.js';
 import { videoCodecArgs } from './encoder.js';
+import { titleImage, rankLineImage, endImage } from './textimg.js';
 
 const W = 1080;
 const H = 1920;
@@ -18,7 +19,7 @@ export function defaultRanking() {
   return {
     title: { text: 'Ranking Best Moments', font: 'Archivo Black', size: 28, bold: false, italic: false, align: 'center', color: '#ffffff', bg: '', strokeColor: '#000000', strokeWidth: 2, y: 0.05 },
     general: { videoHeight: 80, background: '#000000', fit: 'cover', captions: false, captionStyle: 'bold', targetLength: 60 },
-    ranks: { show: true, font: 'Archivo Black', size: 22, numberColor: '#ffffff', labelColor: '#ffe500', strokeColor: '#000000', popColor: '#ffe500', strokeWidth: 2, x: 0.04, y: 0.2 },
+    ranks: { show: true, font: 'Archivo Black', size: 22, numberColor: '#ffffff', labelColor: '#ffe500', strokeColor: '#000000', popColor: '#ffe500', strokeWidth: 2, x: 0.04, y: 0.2, labelMode: 'stay', labelSeconds: 3 },
     playback: { custom: false, order: 'countdown' },
     extras: { rankPop: true, transition: 'flash', sfx: true, announce: false, announceVoice: '', musicVolume: 0.15, watermark: '', markColor: '#ffffff', endText: '', endColor: '#ffffff', endDuration: 2.5 },
     music: null,
@@ -85,27 +86,11 @@ export function overlayAss(r, segments, bodyLen, endLen) {
     `Style: Mark,Arial,40,${assColor(x.markColor)},${assColor(x.markColor)},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,3,0,0,0,1`,
     `Style: Fx,Arial,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1`,
   ];
+  // Title, rank list and end-screen text are drawn as images (textimg.js) so they can show emoji;
+  // this subtitle layer only carries the pop-up number, transitions and the watermark.
+  void t;
+  void titleBox;
   const lines = [];
-  if (t.text?.trim()) {
-    const an = { left: 7, center: 8, right: 9 }[t.align] || 8;
-    const px = { 7: 48, 8: W / 2, 9: W - 48 }[an];
-    lines.push(`Dialogue: 2,${ts(0)},${ts(total)},Title,,0,0,0,,{\\an${an}\\pos(${px},${Math.round(t.y * H)})}${richToAss(t.text, t.color)}`);
-  }
-  if (k.show) {
-    const lineH = Math.round(k.size * SCALE * 1.45);
-    const px = Math.round(k.x * W);
-    r.items.forEach((item, i) => {
-      const seg = segments.find((s) => s.index === i);
-      if (!seg) return;
-      const pos = `{\\an7\\pos(${px},${Math.round(k.y * H) + i * lineH})}`;
-      const number = `${i + 1}.`;
-      const labelColor = item.color || k.labelColor;
-      const label = plainText(item.label).trim() ? richToAss(item.label, labelColor) : '';
-      // Number only until this rank plays, then the label appears next to it and stays.
-      if (seg.start > 0) lines.push(`Dialogue: 2,${ts(0)},${ts(seg.start)},Rank,,0,0,0,,${pos}${number}`);
-      lines.push(`Dialogue: 2,${ts(seg.start)},${ts(total)},Rank,,0,0,0,,${pos}${number}${label ? ` {\\c${assColor(labelColor)}}${label}` : ''}`);
-    });
-  }
   for (const seg of segments) {
     if (x.rankPop) {
       // Big "#3" that punches in at the start of each rank.
@@ -118,10 +103,6 @@ export function overlayAss(r, segments, bodyLen, endLen) {
     }
   }
   if (x.watermark?.trim()) lines.push(`Dialogue: 5,${ts(0)},${ts(total)},Mark,,0,0,0,,{\\an3\\pos(${W - 36},${H - 36})\\alpha&H50&}${clean(x.watermark)}`);
-  if (endLen > 0) {
-    lines.push(`Dialogue: 6,${ts(bodyLen)},${ts(total)},Fx,,0,0,0,,{\\an7\\pos(0,0)\\p1\\1c&H000000&\\alpha&H40&\\fad(250,0)}${FULL_RECT}`);
-    lines.push(`Dialogue: 7,${ts(bodyLen)},${ts(total)},End,,0,0,0,,{\\an5\\pos(${W / 2},${H / 2})\\fad(250,0)}${richToAss(x.endText, x.endColor)}`);
-  }
   return `[Script Info]
 ScriptType: v4.00+
 PlayResX: ${W}
@@ -137,6 +118,28 @@ ${styles.join('\n')}
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 ${lines.join('\n')}
 `;
+}
+
+/**
+ * When each rank-list line shows the number only and when it shows "number + label".
+ * labelMode: 'stay' (until the end), 'during' (only while its clip plays), 'seconds' (labelSeconds after it starts).
+ * Returns [{ index, withLabel, start, end }].
+ */
+export function rankTimeline(r, segments, total) {
+  const k = r.ranks;
+  const out = [];
+  for (const seg of segments) {
+    const i = seg.index;
+    const hasLabel = Boolean(plainText(r.items[i]?.label).trim());
+    const mode = k.labelMode || 'stay';
+    let labelEnd = total;
+    if (mode === 'during') labelEnd = seg.end;
+    else if (mode === 'seconds') labelEnd = Math.min(total, seg.start + Math.max(0.5, Number(k.labelSeconds) || 3));
+    if (seg.start > 0) out.push({ index: i, withLabel: false, start: 0, end: seg.start });
+    out.push({ index: i, withLabel: hasLabel, start: seg.start, end: hasLabel ? labelEnd : total });
+    if (hasLabel && labelEnd < total) out.push({ index: i, withLabel: false, start: labelEnd, end: total });
+  }
+  return out;
 }
 
 /** A short synthetic whoosh (filtered pink noise with a fast swell), so no sound files need shipping. */
@@ -232,7 +235,19 @@ export async function renderRanking(dir, project, onProgress) {
     }
   }
   fs.writeFileSync(path.join(dir, 'overlay.ass'), overlayAss(r, segments, bodyLen, endLen), 'utf8');
-  vf.push('subtitles=overlay.ass:fontsdir=../../fonts');
+
+  // Text images (title, rank lines, end screen), each shown during its time window.
+  const images = [];
+  if (plainText(r.title.text).trim()) images.push({ ...titleImage(dir, r.title), start: 0, end: total });
+  if (r.ranks.show) {
+    const made = new Map();
+    for (const span of rankTimeline(r, segments, total)) {
+      const key = `${span.index}${span.withLabel ? 'L' : ''}`;
+      if (!made.has(key)) made.set(key, rankLineImage(dir, r, span.index, span.withLabel));
+      images.push({ ...made.get(key), start: span.start, end: span.end });
+    }
+  }
+  if (endLen) images.push({ ...endImage(dir, r), start: bodyLen, end: total, fadeIn: true });
 
   // 4. Audio: clip audio (ducked under announcements) + announcements + whooshes + music.
   onProgress?.(0.79, 'Mixing audio');
@@ -275,8 +290,23 @@ export async function renderRanking(dir, project, onProgress) {
   const audioOut = mix.length ? `[main]${mix.join('')}amix=inputs=${mix.length + 1}:duration=first:normalize=0[aout]` : '[main]anull[aout]';
   af.push(audioOut);
 
-  // 5. Final render.
-  const filter = `[0:v]${vf.join(',')}[vout];${af.join(';')}`;
+  // 5. Final render: base video → text images → pop-ups / transitions / watermark on top.
+  const vchain = [`[0:v]${vf.length ? vf.join(',') : 'null'}[v0]`];
+  let cur = 'v0';
+  images.forEach((img, j) => {
+    // Still images: 1 fps is plenty (overlay repeats the last frame) and avoids decoding the PNG 30× a second.
+    inputs.push('-loop', '1', '-framerate', '1', '-t', (total + 1).toFixed(2), '-i', img.file);
+    const idx = next++;
+    let src = `[${idx}:v]`;
+    if (img.fadeIn) {
+      vchain.push(`${src}format=rgba,fade=t=in:st=${img.start.toFixed(2)}:d=0.25:alpha=1[img${j}]`);
+      src = `[img${j}]`;
+    }
+    vchain.push(`[${cur}]${src}overlay=x=${img.x}:y=${img.y}:enable='between(t,${img.start.toFixed(3)},${(img.end - 0.001).toFixed(3)})'[o${j}]`);
+    cur = `o${j}`;
+  });
+  vchain.push(`[${cur}]subtitles=overlay.ass:fontsdir=../../fonts,format=yuv420p[vout]`);
+  const filter = `${vchain.join(';')};${af.join(';')}`;
   await ffmpegWithProgress(
     [...inputs, '-filter_complex', filter, '-map', '[vout]', '-map', '[aout]', '-t', total.toFixed(2), ...codec, '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', 'ranking.tmp.mp4'],
     total,
@@ -287,6 +317,7 @@ export async function renderRanking(dir, project, onProgress) {
   await ffmpeg(['-ss', String(Math.min(1.5, total / 2)), '-i', 'ranking.mp4', '-frames:v', '1', '-vf', 'scale=360:-2', '-q:v', '4', 'ranking-thumb.jpg'], { cwd: dir });
   for (const s of segments) fs.rmSync(path.join(dir, s.file), { force: true });
   for (const f of ['body.mp4', 'concat.txt', 'whoosh.wav']) fs.rmSync(path.join(dir, f), { force: true });
+  for (const f of fs.readdirSync(dir)) if (f.startsWith('ovl-')) fs.rmSync(path.join(dir, f), { force: true });
   return { file: 'ranking.mp4', thumb: 'ranking-thumb.jpg', duration: +total.toFixed(2) };
 }
 

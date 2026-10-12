@@ -75,6 +75,11 @@ export function registerToolRoutes(app, upload, wrap) {
     for (const section of ['title', 'general', 'ranks', 'playback', 'extras']) p.ranking[section] = { ...d[section], ...p.ranking[section] };
     for (const section of ['title', 'general', 'ranks', 'playback', 'extras']) mergeKnown(p.ranking[section], r[section], d[section]);
     if (!CAPTION_STYLES[p.ranking.general.captionStyle]) p.ranking.general.captionStyle = 'bold';
+    if (!['stay', 'during', 'seconds'].includes(p.ranking.ranks.labelMode)) p.ranking.ranks.labelMode = 'stay';
+    p.ranking.ranks.labelSeconds = Math.min(30, Math.max(0.5, Number(p.ranking.ranks.labelSeconds) || 3));
+    const fontOk = (f) => listFonts().some((x) => x.family === f);
+    if (!fontOk(p.ranking.title.font)) p.ranking.title.font = d.title.font;
+    if (!fontOk(p.ranking.ranks.font)) p.ranking.ranks.font = d.ranks.font;
     // Colors must be #rrggbb (they end up inside the subtitle file); fall back to the default otherwise.
     const HEX = /^#[0-9a-f]{6}$/i;
     for (const section of ['title', 'general', 'ranks', 'extras']) {
@@ -93,6 +98,9 @@ export function registerToolRoutes(app, upload, wrap) {
         const it = byId.get(x.id);
         if (!it) continue;
         if (typeof x.label === 'string') it.label = x.label.slice(0, 800); // room for color markup
+        // Per-rank font; empty means "same as the rank list". Only installed fonts are accepted.
+        if (x.font === '' || x.font === null) delete it.font;
+        else if (typeof x.font === 'string' && listFonts().some((f) => f.family === x.font)) it.font = x.font;
         // Per-rank label color; empty means "use the rank list's label color".
         if (x.color === '' || x.color === null) delete it.color;
         else if (typeof x.color === 'string' && /^#[0-9a-f]{6}$/i.test(x.color)) it.color = x.color;
@@ -148,6 +156,34 @@ export function registerToolRoutes(app, upload, wrap) {
       res.json(loadProject(p.id));
     }),
   );
+
+  // Remove every video from a ranking (settings are kept).
+  app.delete('/api/rankings/:id/items', (req, res) => {
+    const p = getRanking(req, res);
+    if (!p) return;
+    if (['queued', 'processing'].includes(p.status)) return res.status(409).json({ error: 'Wait for the render to finish.' });
+    for (const it of p.ranking.items) if (it.file) fs.rmSync(path.join(projectDir(p.id), it.file), { force: true });
+    p.ranking.items = [];
+    res.json(saveProject(p));
+  });
+
+  // Duplicate a rank (copies its video file so the two can be trimmed independently).
+  app.post('/api/rankings/:id/items/:itemId/duplicate', (req, res) => {
+    const p = getRanking(req, res);
+    if (!p) return;
+    const idx = p.ranking.items.findIndex((x) => x.id === req.params.itemId);
+    const src = p.ranking.items[idx];
+    if (!src) return res.status(404).json({ error: 'Not found' });
+    if (p.ranking.items.length >= MAX_RANKS) return res.status(400).json({ error: `A ranking can have up to ${MAX_RANKS} videos.` });
+    if (src.status !== 'ready') return res.status(400).json({ error: 'Wait until this video is ready.' });
+    const copy = structuredClone(src);
+    copy.id = newId();
+    copy.file = `item-${copy.id}${path.extname(src.file)}`;
+    fs.copyFileSync(path.join(projectDir(p.id), src.file), path.join(projectDir(p.id), copy.file));
+    p.ranking.items.splice(idx + 1, 0, copy);
+    applyAutoTrim(p.ranking);
+    res.json(saveProject(p));
+  });
 
   app.delete('/api/rankings/:id/items/:itemId', (req, res) => {
     const p = getRanking(req, res);

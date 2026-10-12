@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildAss } from '../server/captions.js';
 import { toSegments, wordsIn, findHighlights, bestLine } from '../server/highlights.js';
 import { bestWindow } from '../server/analyze.js';
-import { applyAutoTrim, playOrder, overlayAss, itemLength, defaultRanking } from '../server/ranking.js';
+import { applyAutoTrim, playOrder, overlayAss, itemLength, defaultRanking, rankTimeline } from '../server/ranking.js';
 import { cropXExpr } from '../server/tracking.js';
 import { toSrt, paragraphs } from '../server/routes-tools.js';
 import { spreadWords } from '../server/transcribe.js';
@@ -106,17 +106,34 @@ test('ranking: countdown order plays the last rank first', () => {
   assert.deepEqual(playOrder(r), [0, 1, 2]);
 });
 
-test('ranking: overlay reveals each label when its rank starts, and adds effects', () => {
+test('ranking: labels appear when their rank starts and follow the label-duration setting', () => {
   const r = defaultRanking();
-  r.items = [{ label: 'Best one' }, { label: 'Runner up' }];
-  r.extras = { ...r.extras, watermark: '@me', endText: 'Follow!' };
+  r.items = [{ label: 'Best one 🔥' }, { label: 'Runner up' }];
   const segments = [{ index: 1, start: 0, end: 5 }, { index: 0, start: 5, end: 10 }];
-  const ass = overlayAss(r, segments, 10, 2);
-  assert.match(ass, /Dialogue: 2,0:00:00\.00,0:00:05\.00,Rank.*1\.$/m); // #1 shows only its number before it plays
-  assert.match(ass, /Dialogue: 2,0:00:05\.00,0:00:12\.00,Rank.*1\. .*Best one/);
-  assert.match(ass, /#2/); // rank pop-up
+  // Default: label stays until the end; #1 shows only its number before it plays.
+  let tl = rankTimeline(r, segments, 12);
+  assert.deepEqual(tl.filter((s) => s.index === 0), [
+    { index: 0, withLabel: false, start: 0, end: 5 },
+    { index: 0, withLabel: true, start: 5, end: 12 },
+  ]);
+  // Only while its clip plays.
+  r.ranks.labelMode = 'during';
+  tl = rankTimeline(r, segments, 12);
+  assert.deepEqual(tl.find((s) => s.index === 1 && s.withLabel), { index: 1, withLabel: true, start: 0, end: 5 });
+  // For N seconds.
+  r.ranks.labelMode = 'seconds';
+  r.ranks.labelSeconds = 2;
+  tl = rankTimeline(r, segments, 12);
+  assert.deepEqual(tl.find((s) => s.index === 0 && s.withLabel), { index: 0, withLabel: true, start: 5, end: 7 });
+});
+
+test('ranking: subtitle layer carries pop-ups and watermark', () => {
+  const r = defaultRanking();
+  r.items = [{ label: 'a' }, { label: 'b' }];
+  r.extras = { ...r.extras, watermark: '@me' };
+  const ass = overlayAss(r, [{ index: 1, start: 0, end: 5 }, { index: 0, start: 5, end: 10 }], 10, 0);
+  assert.match(ass, /#2/);
   assert.match(ass, /@me/);
-  assert.match(ass, /Follow!/);
 });
 
 test('tracking: crop expression stays within the frame', () => {

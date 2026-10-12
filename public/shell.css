@@ -165,3 +165,29 @@ main#app.page { max-width: 1180px; width: 100%; margin: 0 auto; padding: 32px 32
 .rich:empty::before { content: attr(data-placeholder); color: #5d6785; font-weight: 450; }
 .title-edit.rich { border: 1px solid var(--line); padding: 12px 14px; line-height: 1.25; }
 .hint { font-size: 12px; color: var(--muted); font-weight: 450; }
+
+/* Trimming */
+.rc-vid-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: none; }
+.rank-card .rc-vid { width: 150px; cursor: pointer; }
+.rank-card .rc-vid video { cursor: pointer; }
+.rc-vid .vid-play { position: absolute; inset: 0; display: grid; place-items: center; font-size: 34px; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7); pointer-events: auto; cursor: pointer; }
+.vid-time { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.trim { display: flex; flex-direction: column; gap: 10px; }
+.trim-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.trim-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tfield { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.tfield input { width: 84px; padding: 6px 8px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.moment { height: 64px; cursor: pointer; }
+.moment .win { min-width: 30px; }
+.moment .win .h { width: 16px; z-index: 2; display: grid; place-items: center; }
+.moment .win .h::after { content: ""; width: 3px; height: 22px; border-radius: 2px; background: rgba(0, 0, 0, 0.55); }
+.moment .win .h.l { left: 0; border-radius: 6px 0 0 6px; }
+.moment .win .h.r { right: 0; border-radius: 0 6px 6px 0; }
+.moment .win .h:hover { background: #ffe58a; }
+.moment .ph { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 4px rgba(0, 0, 0, 0.8); pointer-events: none; z-index: 3; left: 0; }
+
+/* Emoji picker */
+.emoji-pop { position: absolute; z-index: 50; display: grid; grid-template-columns: repeat(8, 36px); gap: 4px; padding: 10px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); }
+.emoji-pop button { width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; font-size: 22px; cursor: pointer; font-family: "Segoe UI Emoji", sans-serif; }
+.emoji-pop button:hover { background: #26304f; }
+.rich { font-family: inherit; }
