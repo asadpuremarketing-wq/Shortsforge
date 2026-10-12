@@ -2,7 +2,20 @@
 
 A local, Viblo-style studio for making short vertical videos (YouTube Shorts, TikTok, Reels).
 
-## Start it
+## Install (for everyone on the team)
+
+You need a Windows PC. An NVIDIA graphics card makes rendering faster but isn't required.
+
+1. Download **[ShortsForge (ZIP)](https://github.com/asadpuremarketing-wq/Shortsforge/archive/refs/heads/main.zip)** and unzip it somewhere you'll keep it, for example `Documents\ShortsForge`.
+2. Double-click **Start ShortsForge.bat**. The first time, it installs Node.js (if needed) and everything else, which takes a few minutes. Your browser then opens ShortsForge.
+   - If Windows shows "Windows protected your PC", click **More info → Run anyway**. This appears because the file was downloaded from the internet.
+3. Keep the black window open while you work. Close it to stop ShortsForge.
+
+**Getting updates:** close ShortsForge, double-click **Update ShortsForge.bat**, then start it again. Your projects (in the `data` folder) and keys are kept.
+
+Each person's projects stay on their own computer. No API keys are needed for Video Ranking. Optional keys go in **Settings**.
+
+## For developers
 
 ```
 npm install     # first time only
