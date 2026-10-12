@@ -5,7 +5,7 @@ import { probe } from './ffmpeg.js';
 import { synthesize } from './tts.js';
 import { CAPTION_STYLES } from './captions.js';
 import { listFonts } from './fonts.js';
-import { defaultRanking, applyAutoTrim, MAX_RANKS } from './ranking.js';
+import { defaultRanking, applyAutoTrim, MAX_RANKS, plainText } from './ranking.js';
 import { isSupportedLink } from './download.js';
 import { z } from 'zod';
 import { llmProvider, generateJSON } from './llm.js';
@@ -22,7 +22,7 @@ function mergeKnown(target, src, defaults) {
     const v = src[key];
     if (v === undefined || v === null) continue;
     if (typeof def === 'number' && Number.isFinite(Number(v))) target[key] = Number(v);
-    else if (typeof def === typeof v) target[key] = typeof v === 'string' ? v.slice(0, 300) : v;
+    else if (typeof def === typeof v) target[key] = typeof v === 'string' ? v.slice(0, 2000) : v; // room for color markup
   }
 }
 
@@ -75,6 +75,15 @@ export function registerToolRoutes(app, upload, wrap) {
     for (const section of ['title', 'general', 'ranks', 'playback', 'extras']) p.ranking[section] = { ...d[section], ...p.ranking[section] };
     for (const section of ['title', 'general', 'ranks', 'playback', 'extras']) mergeKnown(p.ranking[section], r[section], d[section]);
     if (!CAPTION_STYLES[p.ranking.general.captionStyle]) p.ranking.general.captionStyle = 'bold';
+    // Colors must be #rrggbb (they end up inside the subtitle file); fall back to the default otherwise.
+    const HEX = /^#[0-9a-f]{6}$/i;
+    for (const section of ['title', 'general', 'ranks', 'extras']) {
+      for (const [k, v] of Object.entries(p.ranking[section])) {
+        if (!/color$|^bg$|^background$/i.test(k)) continue;
+        if (k === 'bg' && v === '') continue; // no title background
+        if (!HEX.test(v)) p.ranking[section][k] = d[section][k];
+      }
+    }
     if (Array.isArray(r.items)) {
       // Items: the client sends the order plus editable fields; files and status stay server-side.
       const byId = new Map(p.ranking.items.map((it) => [it.id, it]));
@@ -83,7 +92,10 @@ export function registerToolRoutes(app, upload, wrap) {
       for (const x of r.items) {
         const it = byId.get(x.id);
         if (!it) continue;
-        if (typeof x.label === 'string') it.label = x.label.slice(0, 80);
+        if (typeof x.label === 'string') it.label = x.label.slice(0, 800); // room for color markup
+        // Per-rank label color; empty means "use the rank list's label color".
+        if (x.color === '' || x.color === null) delete it.color;
+        else if (typeof x.color === 'string' && /^#[0-9a-f]{6}$/i.test(x.color)) it.color = x.color;
         if (x.auto === true) it.auto = true;
         else if (Number.isFinite(x.trimStart) && Number.isFinite(x.trimEnd) && (Math.abs(x.trimStart - it.trimStart) > 0.01 || Math.abs(x.trimEnd - it.trimEnd) > 0.01)) {
           // A hand-made trim switches this item to manual.
@@ -174,7 +186,7 @@ export function registerToolRoutes(app, upload, wrap) {
       const p = getRanking(req, res);
       if (!p) return;
       if (!llmProvider()) return res.status(400).json({ error: 'Add an Anthropic or OpenAI key in Settings to use AI titles.' });
-      const labels = p.ranking.items.map((it, i) => `#${i + 1}: ${it.label || it.ai?.reason || '(no label)'}`).join('\n');
+      const labels = p.ranking.items.map((it, i) => `#${i + 1}: ${plainText(it.label) || it.ai?.reason || "(no label)"}`).join('\n');
       const { titles } = await generateJSON({
         effort: 'low',
         schema: z.object({ titles: z.array(z.string()) }),

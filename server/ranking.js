@@ -18,9 +18,9 @@ export function defaultRanking() {
   return {
     title: { text: 'Ranking Best Moments', font: 'Archivo Black', size: 28, bold: false, italic: false, align: 'center', color: '#ffffff', bg: '', strokeColor: '#000000', strokeWidth: 2, y: 0.05 },
     general: { videoHeight: 80, background: '#000000', fit: 'cover', captions: false, captionStyle: 'bold', targetLength: 60 },
-    ranks: { show: true, font: 'Archivo Black', size: 22, numberColor: '#ffffff', labelColor: '#ffe500', strokeWidth: 2, x: 0.04, y: 0.2 },
+    ranks: { show: true, font: 'Archivo Black', size: 22, numberColor: '#ffffff', labelColor: '#ffe500', strokeColor: '#000000', popColor: '#ffe500', strokeWidth: 2, x: 0.04, y: 0.2 },
     playback: { custom: false, order: 'countdown' },
-    extras: { rankPop: true, transition: 'flash', sfx: true, announce: false, announceVoice: '', musicVolume: 0.15, watermark: '', endText: '', endDuration: 2.5 },
+    extras: { rankPop: true, transition: 'flash', sfx: true, announce: false, announceVoice: '', musicVolume: 0.15, watermark: '', markColor: '#ffffff', endText: '', endColor: '#ffffff', endDuration: 2.5 },
     music: null,
     items: [],
   };
@@ -47,6 +47,27 @@ const ts = (t) => {
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 };
 const clean = (s) => String(s || '').replace(/[{}\\]/g, '').replace(/\r?\n/g, '\\N');
+// Rich text: the editor stores per-word colors inline as [c=#rrggbb]words[/c]. Text outside a
+// color run uses the field's own color, so old plain-text projects render unchanged.
+const RUN = /\[c=(#[0-9a-f]{6})\]([\s\S]*?)\[\/c\]/gi;
+
+/** Plain text without color markup (for AI prompts, file names, YouTube titles). */
+export function plainText(text) {
+  return String(text || '').replace(RUN, '$2');
+}
+
+/** Rich text → ASS text with color tags; `color` is the field's base color. */
+export function richToAss(text, color) {
+  let out = '';
+  let last = 0;
+  const s = String(text || '');
+  for (const m of s.matchAll(RUN)) {
+    out += clean(s.slice(last, m.index));
+    out += `{\\c${assColor(m[1])}}${clean(m[2])}{\\c${assColor(color)}}`;
+    last = m.index + m[0].length;
+  }
+  return out + clean(s.slice(last));
+}
 const FULL_RECT = `m 0 0 l ${W} 0 ${W} ${H} 0 ${H}`;
 
 /** Title, rank list, rank pop-ups, transitions, watermark and end screen as one subtitle layer. */
@@ -58,17 +79,17 @@ export function overlayAss(r, segments, bodyLen, endLen) {
   const titleBox = Boolean(t.bg);
   const styles = [
     `Style: Title,${t.font},${Math.round(t.size * SCALE)},${assColor(t.color)},${assColor(t.color)},${assColor(titleBox ? t.bg : t.strokeColor)},&H00000000,${t.bold ? -1 : 0},${t.italic ? -1 : 0},0,0,100,100,0,0,${titleBox ? 3 : 1},${titleBox ? 14 : Math.round(t.strokeWidth * SCALE)},0,8,48,48,0,1`,
-    `Style: Rank,${k.font},${Math.round(k.size * SCALE)},${assColor(k.numberColor)},${assColor(k.numberColor)},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,${Math.round(k.strokeWidth * SCALE)},0,7,0,0,0,1`,
-    `Style: Pop,${k.font},240,${assColor(k.labelColor)},${assColor(k.labelColor)},&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,12,6,5,0,0,0,1`,
-    `Style: End,${t.font},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,8,0,5,80,80,0,1`,
-    `Style: Mark,Arial,40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,3,0,0,0,1`,
+    `Style: Rank,${k.font},${Math.round(k.size * SCALE)},${assColor(k.numberColor)},${assColor(k.numberColor)},${assColor(k.strokeColor || '#000000')},&H00000000,0,0,0,0,100,100,0,0,1,${Math.round(k.strokeWidth * SCALE)},0,7,0,0,0,1`,
+    `Style: Pop,${k.font},240,${assColor(k.popColor || k.labelColor)},${assColor(k.popColor || k.labelColor)},&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,12,6,5,0,0,0,1`,
+    `Style: End,${t.font},96,${assColor(x.endColor)},${assColor(x.endColor)},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,8,0,5,80,80,0,1`,
+    `Style: Mark,Arial,40,${assColor(x.markColor)},${assColor(x.markColor)},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,2,0,3,0,0,0,1`,
     `Style: Fx,Arial,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1`,
   ];
   const lines = [];
   if (t.text?.trim()) {
     const an = { left: 7, center: 8, right: 9 }[t.align] || 8;
     const px = { 7: 48, 8: W / 2, 9: W - 48 }[an];
-    lines.push(`Dialogue: 2,${ts(0)},${ts(total)},Title,,0,0,0,,{\\an${an}\\pos(${px},${Math.round(t.y * H)})}${clean(t.text)}`);
+    lines.push(`Dialogue: 2,${ts(0)},${ts(total)},Title,,0,0,0,,{\\an${an}\\pos(${px},${Math.round(t.y * H)})}${richToAss(t.text, t.color)}`);
   }
   if (k.show) {
     const lineH = Math.round(k.size * SCALE * 1.45);
@@ -78,10 +99,11 @@ export function overlayAss(r, segments, bodyLen, endLen) {
       if (!seg) return;
       const pos = `{\\an7\\pos(${px},${Math.round(k.y * H) + i * lineH})}`;
       const number = `${i + 1}.`;
-      const label = clean(item.label);
+      const labelColor = item.color || k.labelColor;
+      const label = plainText(item.label).trim() ? richToAss(item.label, labelColor) : '';
       // Number only until this rank plays, then the label appears next to it and stays.
       if (seg.start > 0) lines.push(`Dialogue: 2,${ts(0)},${ts(seg.start)},Rank,,0,0,0,,${pos}${number}`);
-      lines.push(`Dialogue: 2,${ts(seg.start)},${ts(total)},Rank,,0,0,0,,${pos}${number}${label ? ` {\\c${assColor(k.labelColor)}}${label}` : ''}`);
+      lines.push(`Dialogue: 2,${ts(seg.start)},${ts(total)},Rank,,0,0,0,,${pos}${number}${label ? ` {\\c${assColor(labelColor)}}${label}` : ''}`);
     });
   }
   for (const seg of segments) {
@@ -98,7 +120,7 @@ export function overlayAss(r, segments, bodyLen, endLen) {
   if (x.watermark?.trim()) lines.push(`Dialogue: 5,${ts(0)},${ts(total)},Mark,,0,0,0,,{\\an3\\pos(${W - 36},${H - 36})\\alpha&H50&}${clean(x.watermark)}`);
   if (endLen > 0) {
     lines.push(`Dialogue: 6,${ts(bodyLen)},${ts(total)},Fx,,0,0,0,,{\\an7\\pos(0,0)\\p1\\1c&H000000&\\alpha&H40&\\fad(250,0)}${FULL_RECT}`);
-    lines.push(`Dialogue: 7,${ts(bodyLen)},${ts(total)},End,,0,0,0,,{\\an5\\pos(${W / 2},${H / 2})\\fad(250,0)}${clean(x.endText)}`);
+    lines.push(`Dialogue: 7,${ts(bodyLen)},${ts(total)},End,,0,0,0,,{\\an5\\pos(${W / 2},${H / 2})\\fad(250,0)}${richToAss(x.endText, x.endColor)}`);
   }
   return `[Script Info]
 ScriptType: v4.00+

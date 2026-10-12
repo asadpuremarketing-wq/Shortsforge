@@ -1,7 +1,8 @@
 // Video Ranking: rank up to 7 videos into one countdown video with a live phone preview.
 import { $, $$, app, esc, fmtTime, api, toast, getStatus, getVoices, voiceOptions, onCleanup, poll } from './core.js';
+import { makeRich, setRich, colorSelection, serialize, richHTML, plainText, paletteHTML, syncPalette } from './richtext.js';
 
-const DEFAULT_EXTRAS = { rankPop: true, transition: 'flash', sfx: true, announce: false, announceVoice: '', musicVolume: 0.15, watermark: '', endText: '', endDuration: 2.5 };
+const DEFAULT_EXTRAS = { rankPop: true, transition: 'flash', sfx: true, announce: false, announceVoice: '', musicVolume: 0.15, watermark: '', markColor: '#ffffff', endText: '', endColor: '#ffffff', endDuration: 2.5 };
 
 const MAX = 7;
 const SIZES = [14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 36, 40, 44, 48];
@@ -113,6 +114,8 @@ export async function viewRankingEditor(id) {
   let P = P0;
   const R = P.ranking;
   R.extras = { ...DEFAULT_EXTRAS, ...R.extras };
+  // Color settings added later: fill them in for older projects.
+  R.ranks = { strokeColor: '#000000', popColor: R.ranks.labelColor, ...R.ranks };
   const ui = { dragTitle: false, collapsed: new Set(), dirtyTrim: new Set(), resetAuto: new Set(), tab: P.output ? 'final' : 'preview' };
 
   const fontOptions = (sel) => fonts.map((f) => `<option value="${esc(f.family)}" style="font-family:'${esc(f.family)}'" ${f.family === sel ? 'selected' : ''}>${esc(f.family)}</option>`).join('');
@@ -144,16 +147,16 @@ export async function viewRankingEditor(id) {
               </div>
               <div class="tgroup"><button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">↶</button><button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y)">↷</button></div>
               ${s.llm ? '<button class="btn sm ai-btn" id="suggestTitle">✨ Suggest titles</button>' : ''}
-              <div class="tgroup" style="gap:8px;padding:4px 8px">
-                ${swatch('title.color', R.title.color)}
-                <button class="tbtn" id="bgToggle" title="Text background">T</button>
-                <span id="bgSwatch">${swatch('title.bgColor', R.title.bg || '#000000')}</span>
-              </div>
             </div>
-            <textarea class="title-edit" id="titleText" data-bind="title.text" rows="1" placeholder="Ranking Best Parkour Fails">${esc(R.title.text)}</textarea>
+            <div class="title-edit rich" id="titleText"></div>
+            <div class="color-grid">
+              <div class="cfield"><span class="label">Text color <span class="hint">· select words first to color only them</span></span>${paletteHTML('title', R.title.color)}</div>
+              <div class="cfield"><span class="label">Outline color</span>${paletteHTML('title.strokeColor', R.title.strokeColor)}</div>
+              <div class="cfield"><span class="label">Background box <button class="btn sm" id="bgNone" style="margin-left:6px">None</button></span>${paletteHTML('title.bg', R.title.bg || '#000000')}</div>
+            </div>
             <div class="stack" style="gap:8px">
-              <span class="label">Title Stroke</span>
-              <div class="slider-box" style="max-width:460px">${swatch('title.strokeColor', R.title.strokeColor)}<input type="range" min="0" max="6" step="0.5" data-bind="title.strokeWidth" data-num value="${R.title.strokeWidth}" /><output data-out="title.strokeWidth">${R.title.strokeWidth}</output></div>
+              <span class="label">Outline thickness</span>
+              <div class="slider-box" style="max-width:460px"><input type="range" min="0" max="6" step="0.5" data-bind="title.strokeWidth" data-num value="${R.title.strokeWidth}" /><output data-out="title.strokeWidth">${R.title.strokeWidth}</output></div>
             </div>
           </section>
 
@@ -161,10 +164,15 @@ export async function viewRankingEditor(id) {
             <div class="panel-head"><h2>Rank Numbers</h2>${toggle('ranks.show', R.ranks.show, '<span class="muted">Show</span>')}</div>
             <div class="toolbar">
               <div class="tgroup"><select data-bind="ranks.font">${fontOptions(R.ranks.font)}</select><select data-bind="ranks.size" data-num>${sizeOptions(R.ranks.size)}</select></div>
-              <div class="tgroup" style="gap:10px;padding:4px 10px"><span class="small muted">Number</span>${swatch('ranks.numberColor', R.ranks.numberColor)}<span class="small muted">Label</span>${swatch('ranks.labelColor', R.ranks.labelColor)}</div>
+            </div>
+            <div class="color-grid">
+              <div class="cfield"><span class="label">Number color</span>${paletteHTML('ranks.numberColor', R.ranks.numberColor)}</div>
+              <div class="cfield"><span class="label">Label color <span class="hint">· all ranks; each rank can override below</span></span>${paletteHTML('ranks.labelColor', R.ranks.labelColor)}</div>
+              <div class="cfield"><span class="label">Outline color</span>${paletteHTML('ranks.strokeColor', R.ranks.strokeColor || '#000000')}</div>
+              <div class="cfield"><span class="label">Big pop-up number color</span>${paletteHTML('ranks.popColor', R.ranks.popColor || R.ranks.labelColor)}</div>
             </div>
             <div class="stack" style="gap:8px">
-              <span class="label">Stroke</span>
+              <span class="label">Outline thickness</span>
               <div class="slider-box" style="max-width:460px"><input type="range" min="0" max="6" step="0.5" data-bind="ranks.strokeWidth" data-num value="${R.ranks.strokeWidth}" /><output data-out="ranks.strokeWidth">${R.ranks.strokeWidth}</output></div>
             </div>
             <span class="muted small">Tip: drag the rank list in the preview to move it. Each label appears when its video starts playing.</span>
@@ -217,8 +225,8 @@ export async function viewRankingEditor(id) {
               </div>
             </div>
             <div class="two">
-              <label class="field">Watermark<input type="text" data-bind="extras.watermark" value="${esc(R.extras.watermark)}" placeholder="@yourchannel" maxlength="40" /></label>
-              <label class="field">End screen text<input type="text" data-bind="extras.endText" value="${esc(R.extras.endText)}" placeholder="Follow for Part 2!" maxlength="60" /></label>
+              <div class="cfield"><label class="field">Watermark<input type="text" data-bind="extras.watermark" value="${esc(R.extras.watermark)}" placeholder="@yourchannel" maxlength="40" /></label>${paletteHTML('extras.markColor', R.extras.markColor || '#ffffff')}</div>
+              <div class="cfield"><span class="label">End screen text <span class="hint">· select words to color them</span></span><div class="rich" id="endText"></div>${paletteHTML('end', R.extras.endColor || '#ffffff')}</div>
             </div>
           </section>
 
@@ -272,8 +280,8 @@ export async function viewRankingEditor(id) {
     $$('[data-align]').forEach((b) => b.classList.toggle('on', R.title.align === b.dataset.align));
     $$('#fitSeg button').forEach((b) => b.classList.toggle('selected', R.general.fit === b.dataset.v));
     $$('#orderSeg button').forEach((b) => b.classList.toggle('selected', R.playback.order === b.dataset.v));
-    $('#bgToggle').classList.toggle('on', Boolean(R.title.bg));
-    $('#bgSwatch').hidden = !R.title.bg;
+    $('#bgNone').classList.toggle('on', !R.title.bg);
+    $('#bgNone').textContent = R.title.bg ? 'Remove' : 'None';
     $('#capStyle').hidden = !R.general.captions;
     $('#orderRow').hidden = !R.playback.custom;
     const countdown = !R.playback.custom || R.playback.order === 'countdown';
@@ -284,10 +292,88 @@ export async function viewRankingEditor(id) {
     ta.style.fontWeight = R.title.bold ? 700 : 400;
     ta.style.fontStyle = R.title.italic ? 'italic' : 'normal';
     ta.style.textAlign = R.title.align;
-    ta.style.height = 'auto';
-    ta.style.height = `${ta.scrollHeight}px`;
+    ta.style.color = R.title.color;
+    ta.dataset.base = R.title.color;
+    $('#endText').style.color = R.extras.endColor || '#ffffff';
+    $('#endText').dataset.base = R.extras.endColor || '#ffffff';
     $$('.swatch').forEach((sw) => (sw.style.background = sw.querySelector('input').value));
+    $$('.palette').forEach((pal) => syncPalette(pal, paletteColor(pal.dataset.target)));
+    // No background box: don't show any color as selected.
+    if (!R.title.bg) $$('.palette[data-target="title.bg"] .dot.on').forEach((d) => d.classList.remove('on'));
   }
+
+  // ---------- Colors ----------
+
+  /** The current color a palette shows: its setting, or for a rank label its own color / the shared one. */
+  function paletteColor(target) {
+    if (target === 'title') return R.title.color;
+    if (target === 'end') return R.extras.endColor || '#ffffff';
+    if (target === 'title.bg') return R.title.bg || '#000000';
+    if (target.startsWith('label:')) {
+      const it = R.items.find((x) => x.id === target.slice(6));
+      return it?.color || R.ranks.labelColor;
+    }
+    return getPath(target) || '#ffffff';
+  }
+
+  /**
+   * Apply a color from a palette. For text boxes (title, end text, rank labels): if words are selected,
+   * color just those words; otherwise change the whole text's color.
+   */
+  function applyColor(target, hex) {
+    if (target === 'title') {
+      if (!colorSelection($('#titleText'), hex)) R.title.color = hex;
+    } else if (target === 'end') {
+      if (!colorSelection($('#endText'), hex)) R.extras.endColor = hex;
+    } else if (target.startsWith('label:')) {
+      const it = R.items.find((x) => x.id === target.slice(6));
+      const box = $(`[data-label="${it?.id}"]`);
+      if (!it || !box) return;
+      if (!colorSelection(box, hex)) {
+        it.color = hex === R.ranks.labelColor ? '' : hex;
+        box.style.color = hex;
+        box.dataset.base = hex;
+        it.label = serialize(box, hex);
+      }
+      drawPreview();
+      syncToolbar();
+      scheduleSave();
+      recordHistory();
+      return;
+    } else {
+      setPath(target, hex);
+      if (target === 'ranks.labelColor') {
+        // Labels without their own color follow the shared one.
+        for (const it of R.items) {
+          if (it.color) continue;
+          const box = $(`[data-label="${it.id}"]`);
+          if (box) (box.style.color = hex), (box.dataset.base = hex);
+        }
+      }
+    }
+    changed();
+  }
+
+  // Keep the text selection when a color dot is clicked.
+  const onDotDown = (e) => {
+    if (e.target.closest('.palette .dot[data-color]')) e.preventDefault();
+  };
+  const onDotClick = (e) => {
+    const dot = e.target.closest('.palette .dot[data-color]');
+    if (dot) applyColor(dot.closest('.palette').dataset.target, dot.dataset.color);
+  };
+  const onPick = (e) => {
+    const pick = e.target.closest('.palette .custom input');
+    if (pick) applyColor(pick.closest('.palette').dataset.target, pick.value);
+  };
+  app.addEventListener('mousedown', onDotDown);
+  app.addEventListener('click', onDotClick);
+  app.addEventListener('input', onPick);
+  onCleanup(() => {
+    app.removeEventListener('mousedown', onDotDown);
+    app.removeEventListener('click', onDotClick);
+    app.removeEventListener('input', onPick);
+  });
 
   const changed = () => {
     syncToolbar();
@@ -298,7 +384,7 @@ export async function viewRankingEditor(id) {
 
   // ---------- Undo / redo (settings, labels and rank order) ----------
 
-  const snapshot = () => JSON.stringify({ title: R.title, general: R.general, ranks: R.ranks, playback: R.playback, extras: R.extras, items: R.items.map((it) => [it.id, it.label || '']) });
+  const snapshot = () => JSON.stringify({ title: R.title, general: R.general, ranks: R.ranks, playback: R.playback, extras: R.extras, items: R.items.map((it) => [it.id, it.label || '', it.color || '']) });
   const history = [snapshot()];
   let hPos = 0;
   let hTimer;
@@ -322,9 +408,9 @@ export async function viewRankingEditor(id) {
     const s0 = JSON.parse(snap);
     for (const k of ['title', 'general', 'ranks', 'playback', 'extras']) R[k] = s0[k];
     const byId = new Map(R.items.map((it) => [it.id, it]));
-    const ordered = s0.items.map(([iid, label]) => {
+    const ordered = s0.items.map(([iid, label, color]) => {
       const it = byId.get(iid);
-      if (it) it.label = label;
+      if (it) Object.assign(it, { label, color: color || '' });
       return it;
     }).filter(Boolean);
     R.items = [...ordered, ...R.items.filter((it) => !ordered.includes(it))];
@@ -338,6 +424,8 @@ export async function viewRankingEditor(id) {
       const out = $(`[data-out="${bind}"]`);
       if (out) out.textContent = bind === 'extras.musicVolume' ? Math.round(v * 100) : v;
     });
+    setRich($('#titleText'), R.title.text, R.title.color);
+    setRich($('#endText'), R.extras.endText, R.extras.endColor || '#ffffff');
     syncToolbar();
     renderItems();
     drawPreview();
@@ -446,8 +534,8 @@ export async function viewRankingEditor(id) {
     } else if (t.dataset.align) {
       R.title.align = t.dataset.align;
       changed();
-    } else if (t.id === 'bgToggle') {
-      R.title.bg = R.title.bg ? '' : $('[data-bind="title.bgColor"]').value || '#000000';
+    } else if (t.id === 'bgNone') {
+      R.title.bg = '';
       changed();
     } else if (t.closest('#fitSeg')) {
       R.general.fit = t.dataset.v;
@@ -471,7 +559,7 @@ export async function viewRankingEditor(id) {
     } else if (t.id === 'suggestTitle') suggestTitles(t);
     else if (t.dataset.pickTitle !== undefined) {
       R.title.text = t.dataset.pickTitle;
-      $('#titleText').value = R.title.text;
+      setRich($('#titleText'), R.title.text, R.title.color);
       $('#titleIdeas')?.remove();
       changed();
     } else if (t.dataset.tab) {
@@ -500,7 +588,7 @@ export async function viewRankingEditor(id) {
         playback: R.playback,
         extras: R.extras,
         items: R.items.map((it) => {
-          const x = { id: it.id, label: it.label || '' };
+          const x = { id: it.id, label: it.label || '', color: it.color || '' };
           if (ui.resetAuto.has(it.id)) x.auto = true;
           else if (ui.dirtyTrim.has(it.id)) Object.assign(x, { trimStart: it.trimStart, trimEnd: it.trimEnd });
           return x;
@@ -531,7 +619,7 @@ export async function viewRankingEditor(id) {
       const li = local.get(si.id);
       if (!li) return si;
       const keepTrim = ui.dirtyTrim.has(si.id) ? { trimStart: li.trimStart, trimEnd: li.trimEnd, auto: false } : {};
-      return { ...si, label: li.label || si.label, ...keepTrim };
+      return { ...si, label: li.label || si.label, color: li.color ?? si.color, ...keepTrim };
     });
     Object.assign(P, { status: fresh.status, step: fresh.step, progress: fresh.progress, error: fresh.error, output: fresh.output });
     if (R.items.map((i) => `${i.id}:${i.status}`).join() !== before) {
@@ -584,7 +672,7 @@ export async function viewRankingEditor(id) {
       <div class="rank-card ${ui.collapsed.has(it.id) ? 'collapsed' : ''}" data-id="${it.id}">
         <div class="rc-head" data-act="collapse">
           <div class="num">${i + 1}</div>
-          <div class="name">Video Rank ${i + 1}${it.label ? ` <span class="muted" style="font-weight:450">· ${esc(it.label)}</span>` : ''}</div>
+          <div class="name">Video Rank ${i + 1}${plainText(it.label) ? ` <span class="muted" style="font-weight:450">· ${esc(plainText(it.label))}</span>` : ''}</div>
           <button class="icon-btn" data-act="up" title="Move up" ${i === 0 ? 'disabled' : ''}>${I.up}</button>
           <button class="icon-btn" data-act="down" title="Move down" ${i === n - 1 ? 'disabled' : ''}>${I.down}</button>
           <button class="icon-btn" data-act="del" title="Remove">${I.trash}</button>
@@ -593,9 +681,10 @@ export async function viewRankingEditor(id) {
           <div class="rc-vid">${it.status === 'ready' ? `<video src="/files/${id}/${it.file}#t=${it.trimStart || 0}" muted preload="metadata" playsinline></video>` : ''}</div>
           <div class="rc-fields">
             <div class="two" style="grid-template-columns:1fr 120px">
-              <label class="field">Label next to #${i + 1}<input type="text" data-label="${it.id}" value="${esc(it.label || '')}" placeholder="e.g. Rooftop slip" maxlength="80" /></label>
+              <div class="field">Label next to #${i + 1} <span class="hint">· select words to color them</span><div class="rich" data-label="${it.id}"></div></div>
               <label class="field">Rank<select data-rank="${it.id}">${R.items.map((_, k) => `<option value="${k}" ${k === i ? 'selected' : ''}>#${k + 1}</option>`).join('')}</select></label>
             </div>
+            ${paletteHTML(`label:${it.id}`, it.color || R.ranks.labelColor)}
             ${statusBlock(it)}
             <span class="muted small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Source: ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noreferrer">${esc(it.url)}</a>` : esc(it.sourceName || '')}${it.duration ? ` · ${fmtTime(it.duration)}` : ''}</span>
           </div>
@@ -623,15 +712,41 @@ export async function viewRankingEditor(id) {
   function renderItems() {
     const active = document.activeElement;
     const focusLabel = active?.dataset?.label;
-    const caret = focusLabel ? active.selectionStart : 0;
     itemsBox.innerHTML = R.items.map(itemCard).join('') + (R.items.length < MAX ? addCard(R.items.length) : `<div class="muted small" style="text-align:center">Maximum of ${MAX} videos reached.</div>`);
     R.items.forEach(updateMoment);
+    // Each label is a colorable text box.
+    for (const it of R.items) {
+      const box = $(`[data-label="${it.id}"]`);
+      if (!box) continue;
+      makeRich(box, {
+        value: it.label || '',
+        base: it.color || R.ranks.labelColor,
+        placeholder: 'e.g. Rooftop slip',
+        onChange: (markup) => {
+          it.label = markup;
+          const name = $(`[data-id="${it.id}"] .name`);
+          const plain = plainText(markup);
+          name.innerHTML = `Video Rank ${R.items.indexOf(it) + 1}${plain ? ` <span class="muted" style="font-weight:450">· ${esc(plain)}</span>` : ''}`;
+          drawPreview();
+          scheduleSave();
+          recordHistory();
+        },
+      });
+    }
     $$('.rc-vid video', itemsBox).forEach((v) => v.addEventListener('mouseenter', () => v.play().catch(() => {})));
     $$('.rc-vid video', itemsBox).forEach((v) => v.addEventListener('mouseleave', () => v.pause()));
+    $$('.palette', itemsBox).forEach((pal) => syncPalette(pal, paletteColor(pal.dataset.target)));
     if (focusLabel) {
+      // Put the caret back at the end of the label being typed in.
       const el = $(`[data-label="${focusLabel}"]`);
-      el?.focus();
-      el?.setSelectionRange(caret, caret);
+      if (el) {
+        el.focus();
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        r.collapse(false);
+        getSelection().removeAllRanges();
+        getSelection().addRange(r);
+      }
     }
   }
 
@@ -709,18 +824,6 @@ export async function viewRankingEditor(id) {
     } else if (act === 'play') playSequence([idx]);
   });
 
-  itemsBox.addEventListener('input', (e) => {
-    const lid = e.target.dataset.label;
-    if (!lid) return;
-    const it = R.items.find((x) => x.id === lid);
-    it.label = e.target.value;
-    const name = $(`[data-id="${lid}"] .name`);
-    const i = R.items.indexOf(it);
-    name.innerHTML = `Video Rank ${i + 1}${it.label ? ` <span class="muted" style="font-weight:450">· ${esc(it.label)}</span>` : ''}`;
-    drawPreview();
-    scheduleSave();
-    recordHistory();
-  });
   itemsBox.addEventListener('change', (e) => {
     if (e.target.dataset.rank) move(R.items.findIndex((x) => x.id === e.target.dataset.rank), Number(e.target.value));
     if (e.target.id === 'uploadIn') uploadFiles([...e.target.files]);
@@ -882,25 +985,26 @@ export async function viewRankingEditor(id) {
       textAlign: t.align,
       textShadow: t.bg ? 'none' : strokeShadow(t.strokeColor, t.strokeWidth * sc),
     });
-    el.innerHTML = t.bg ? `<span style="background:${esc(t.bg)};padding:${(14 / 1080) * w}px;box-decoration-break:clone;-webkit-box-decoration-break:clone">${esc(t.text)}</span>` : esc(t.text);
+    el.innerHTML = t.bg ? `<span style="background:${esc(t.bg)};padding:${(14 / 1080) * w}px;box-decoration-break:clone;-webkit-box-decoration-break:clone">${richHTML(t.text)}</span>` : richHTML(t.text);
     el.classList.toggle('draggable', ui.dragTitle);
 
     const mark = $('#pvMark');
     mark.textContent = R.extras.watermark || '';
+    mark.style.color = R.extras.markColor || '#ffffff';
     Object.assign(mark.style, { right: `${(36 / 1080) * w}px`, bottom: `${(36 / 1080) * w}px`, fontSize: `${(40 / 1080) * w}px` });
     const pop = $('#pvPop');
-    Object.assign(pop.style, { fontFamily: `"${R.ranks.font}"`, fontSize: `${(240 / 1080) * w}px`, color: R.ranks.labelColor, textShadow: strokeShadow('#000', (12 / 1080) * w) });
+    Object.assign(pop.style, { fontFamily: `"${R.ranks.font}"`, fontSize: `${(240 / 1080) * w}px`, color: R.ranks.popColor || R.ranks.labelColor, textShadow: strokeShadow('#000', (12 / 1080) * w) });
 
     const k = R.ranks;
     const rl = $('#pvRanks');
     rl.hidden = !k.show;
     const lh = k.size * sc * 1.45;
-    Object.assign(rl.style, { left: `${k.x * w}px`, top: `${k.y * h}px`, fontFamily: `"${k.font}"`, fontSize: `${k.size * sc}px`, color: k.numberColor, textShadow: strokeShadow('#000', k.strokeWidth * sc) });
+    Object.assign(rl.style, { left: `${k.x * w}px`, top: `${k.y * h}px`, fontFamily: `"${k.font}"`, fontSize: `${k.size * sc}px`, color: k.numberColor, textShadow: strokeShadow(k.strokeColor || '#000', k.strokeWidth * sc) });
     const count = Math.max(R.items.length, 1);
     rl.innerHTML = Array.from({ length: count }, (_, i) => {
       const it = R.items[i];
       const show = it?.label && (!player.revealed || player.revealed.has(i));
-      return `<div style="height:${lh}px;line-height:${lh}px">${i + 1}.${show ? ` <span style="color:${esc(k.labelColor)}">${esc(it.label)}</span>` : ''}</div>`;
+      return `<div style="height:${lh}px;line-height:${lh}px">${i + 1}.${show ? ` <span style="color:${esc(it.color || k.labelColor)}">${richHTML(it.label)}</span>` : ''}</div>`;
     }).join('');
   }
 
@@ -1061,7 +1165,7 @@ export async function viewRankingEditor(id) {
         <video class="final-video" src="/files/${id}/${P.output.file}?v=${P.output.version}" controls playsinline></video>
         <div class="row" style="justify-content:center">
           <a class="btn primary" href="/files/${id}/${P.output.file}?download=1">⬇ Download MP4</a>
-          <button class="btn" data-yt-project="${id}" data-yt-file="${P.output.file}" data-yt-title="${esc(R.title.text)}">▶ Upload to YouTube</button>
+          <button class="btn" data-yt-project="${id}" data-yt-file="${P.output.file}" data-yt-title="${esc(plainText(R.title.text))}">▶ Upload to YouTube</button>
         </div>
         <span class="muted small">1080×1920 · ${fmtTime(P.output.duration)}${BUSY_PROJECT.includes(P.status) ? ' · a new version is rendering…' : ''}</span>`;
     } else {
@@ -1095,6 +1199,28 @@ export async function viewRankingEditor(id) {
 
   // ---------- Initial paint ----------
 
+  makeRich($('#titleText'), {
+    value: R.title.text,
+    base: R.title.color,
+    multiline: true,
+    placeholder: 'Ranking Best Parkour Fails',
+    onChange: (markup) => {
+      R.title.text = markup;
+      drawPreview();
+      scheduleSave();
+      recordHistory();
+    },
+  });
+  makeRich($('#endText'), {
+    value: R.extras.endText,
+    base: R.extras.endColor || '#ffffff',
+    placeholder: 'Follow for Part 2!',
+    onChange: (markup) => {
+      R.extras.endText = markup;
+      scheduleSave();
+      recordHistory();
+    },
+  });
   syncToolbar();
   syncHistoryButtons();
   renderItems();
