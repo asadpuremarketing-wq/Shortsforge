@@ -970,13 +970,36 @@ export async function viewRankingEditor(id) {
     drawPreview();
     idleFrame();
   }
+  const nextClip = () => {
+    if (!player.playing) return;
+    player.k++;
+    startCurrent();
+  };
   pv.addEventListener('timeupdate', () => {
-    if (player.playing && pv.currentTime >= player.end - 0.05) {
-      player.k++;
-      startCurrent();
-    }
+    if (player.playing && pv.currentTime >= player.end - 0.12) nextClip();
     updateTime();
   });
+  // A clip can end slightly before its listed length (common with TikTok files): move on instead of freezing.
+  pv.addEventListener('ended', nextClip);
+  pv.addEventListener('error', () => {
+    if (!player.playing) return;
+    toast('A clip could not be played in the preview; skipping it. The final video is not affected.', true);
+    nextClip();
+  });
+  // Watchdog: if playback stops advancing for 2 seconds, skip to the next clip.
+  let lastT = -1;
+  let stuckFor = 0;
+  const watchdog = setInterval(() => {
+    if (!player.playing) return (stuckFor = 0);
+    if (Math.abs(pv.currentTime - lastT) < 0.01 && !pv.seeking) stuckFor += 0.5;
+    else stuckFor = 0;
+    lastT = pv.currentTime;
+    if (stuckFor >= 2) {
+      stuckFor = 0;
+      nextClip();
+    }
+  }, 500);
+  onCleanup(() => clearInterval(watchdog));
   function updateTime() {
     const order = playOrder();
     const total = order.reduce((n, i) => n + itemLength(R.items[i]), 0);

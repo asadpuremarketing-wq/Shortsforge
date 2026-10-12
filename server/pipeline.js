@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { ffmpegWithProgress, probe } from './ffmpeg.js';
+import { ffmpeg, ffmpegWithProgress, probe } from './ffmpeg.js';
+import { videoCodecArgs } from './encoder.js';
 import { renderRanking, applyAutoTrim } from './ranking.js';
 import { analyzeClip } from './analyze.js';
 import { findPeakWithAI } from './vision.js';
@@ -275,10 +276,53 @@ function patchItem(id, itemId, patch) {
   });
 }
 
+/**
+ * Browsers can't reliably play HEVC/AV1/VP9 (TikTok and iPhone use HEVC), so convert anything
+ * that isn't H.264 + yuv420p. Uses the GPU encoder when available. Returns { file, info }.
+ */
+async function toBrowserFriendly(dir, file, onStatus) {
+  let info = await probe(path.join(dir, file));
+  if (!info.hasVideo || (info.videoCodec === 'h264' && info.pixFmt === 'yuv420p')) return { file, info };
+  onStatus?.();
+  const out = `${path.parse(file).name}-h264.mp4`;
+  await ffmpeg(['-i', file, '-map', '0:v:0', '-map', '0:a:0?', ...(await videoCodecArgs()), '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out], { cwd: dir });
+  fs.rmSync(path.join(dir, file), { force: true });
+  info = await probe(path.join(dir, out));
+  return { file: out, info };
+}
+
+/** Repair ranking items added before conversion and accurate lengths existed (runs once per item). */
+export function repairRankingItems(id) {
+  const p = loadProject(id);
+  const todo = (p?.ranking?.items || []).filter((it) => it.status === 'ready' && !it.compat);
+  if (!todo.length) return;
+  enqueue(async () => {
+    for (const it of todo) {
+      try {
+        const { file, info } = await toBrowserFriendly(projectDir(id), it.file);
+        updateProject(id, (x) => {
+          const item = x.ranking.items.find((y) => y.id === it.id);
+          if (!item) return;
+          const duration = +info.duration.toFixed(2);
+          Object.assign(item, { file, duration, compat: true });
+          item.trimEnd = Math.min(item.trimEnd ?? duration, duration);
+          item.trimStart = Math.min(item.trimStart || 0, Math.max(0, duration - 0.5));
+          applyAutoTrim(x.ranking);
+        });
+      } catch (err) {
+        console.warn(`[repair] ${it.file}:`, err.message);
+      }
+    }
+  }).catch(() => {});
+}
+
 /** Probe a file now in the project dir and mark the ranking item ready. */
 export async function finishItem(id, itemId, file) {
-  const info = await probe(path.join(projectDir(id), file));
+  const converted = await toBrowserFriendly(projectDir(id), file, () => patchItem(id, itemId, { status: 'processing' }));
+  file = converted.file;
+  const info = converted.info;
   if (!info.hasVideo) throw new Error('That file has no video.');
+  patchItem(id, itemId, { compat: true });
   const duration = +info.duration.toFixed(2);
   patchItem(id, itemId, { file, status: 'analyzing', error: null, duration, width: info.width, height: info.height, hasAudio: info.hasAudio, trimStart: 0, trimEnd: duration, auto: true });
   let analysis = null;

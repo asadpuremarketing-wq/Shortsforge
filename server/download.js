@@ -50,7 +50,8 @@ export async function downloadVideo(url, dir, baseName, onProgress) {
     // YouTube needs a JavaScript runtime to unlock formats; reuse the Node.js running this app.
     '--js-runtimes', `node:${process.execPath}`,
     '--newline',
-    '-f', 'bv*[height<=1920][ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b',
+    // Best quality up to 1080×1920. Non-H.264 results (TikTok sends HEVC) are converted afterwards for the browser.
+    '-f', 'bv*[height<=1920]+ba/b[height<=1920]/bv*+ba/b',
     '--merge-output-format', 'mp4',
     '--ffmpeg-location', FFMPEG,
     '--print', 'after_move:filepath',

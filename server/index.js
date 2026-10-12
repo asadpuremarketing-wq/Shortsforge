@@ -10,7 +10,7 @@ import { LAYOUTS } from './render.js';
 import { llmProvider, writeHook, writeNarration, rewriteText } from './llm.js';
 import { wordsIn } from './highlights.js';
 import { newId, projectDir, loadProject, saveProject, updateProject, listProjects, deleteProject, summarize } from './store.js';
-import { queueProject, queueClipRender, newClip, queueRankingRender, queueTranscription, downloadItem, queueStoryRender } from './pipeline.js';
+import { queueProject, queueClipRender, newClip, queueRankingRender, queueTranscription, downloadItem, queueStoryRender, repairRankingItems } from './pipeline.js';
 import { registerToolRoutes } from './routes-tools.js';
 import { registerStoryRoutes } from './routes-stories.js';
 import { registerThumbnailRoutes } from './thumbnail.js';
@@ -317,6 +317,7 @@ for (const p of listProjects()) {
   const interrupted = ['queued', 'processing'].includes(p.status);
   if (p.type === 'ranking') {
     for (const it of p.ranking.items) if (it.status === 'downloading' && it.url) downloadItem(p.id, it.id, it.url);
+    repairRankingItems(p.id);
     if (interrupted) queueRankingRender(p.id);
   } else if (p.type === 'story') {
     if (interrupted) queueStoryRender(p.id);

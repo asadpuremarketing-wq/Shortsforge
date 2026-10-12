@@ -56,8 +56,13 @@ export async function probe(file) {
   // Phone footage stores portrait video as landscape + rotation metadata.
   const rotation = Math.abs(Number(video?.side_data_list?.find((x) => x.rotation !== undefined)?.rotation ?? video?.tags?.rotate ?? 0));
   const swap = rotation === 90 || rotation === 270;
+  // Use the shortest of container / video / audio length: TikTok files often claim a longer
+  // container than the picture actually lasts, and seeking past the last frame stalls playback.
+  const lengths = [info.format.duration, video?.duration, audio?.duration].map(Number).filter((n) => n > 0);
   return {
-    duration: Number(info.format.duration) || Number(video?.duration) || 0,
+    duration: lengths.length ? Math.min(...lengths) : 0,
+    videoCodec: video?.codec_name || null,
+    pixFmt: video?.pix_fmt || null,
     width: swap ? video?.height : video?.width,
     height: swap ? video?.width : video?.height,
     fps,
