@@ -56,10 +56,8 @@ if %NEED_INSTALL%==1 (
 )
 
 rem ---- 4. Desktop shortcut (first run only) ----
-if not exist "%USERPROFILE%\Desktop\ShortsForge.lnk" (
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop') + '\ShortsForge.lnk'); $s.TargetPath = '%~f0'; $s.WorkingDirectory = '%~dp0'; $s.Description = 'Start ShortsForge'; $s.Save()" >nul 2>nul
-  if exist "%USERPROFILE%\Desktop\ShortsForge.lnk" echo A "ShortsForge" shortcut was added to your Desktop.
-)
+rem The Desktop may live in OneDrive, so ask Windows where it is.
+if not defined SF_NO_SHORTCUT powershell -NoProfile -ExecutionPolicy Bypass -Command "$l = Join-Path ([Environment]::GetFolderPath('Desktop')) 'ShortsForge.lnk'; if (-not (Test-Path $l)) { $s = (New-Object -ComObject WScript.Shell).CreateShortcut($l); $s.TargetPath = '%~f0'; $s.WorkingDirectory = '%~dp0'; $s.Description = 'Start ShortsForge'; $s.Save(); Write-Host 'A ShortsForge shortcut was added to your Desktop.' }"
 
 rem ---- 5. Start ----
 if not defined SF_NO_BROWSER start "" cmd /c "timeout /t 3 >nul && start http://localhost:5173/#/ranking"
