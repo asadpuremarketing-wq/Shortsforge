@@ -1,5 +1,6 @@
 // ShortsForge front end: sidebar shell + hash router.
 import { $, $$, app, esc, fmtTime, api, toast, getVoices, voiceOptions, runCleanups, poll, openYouTubeUpload } from './core.js';
+import { icon } from './icons.js';
 import { viewCreate, viewProject, viewEditor, STATUS_PILL } from './clips.js';
 import { viewSettings } from './settings.js';
 import { viewRankingHome, viewRankingEditor } from './ranking.js';
@@ -48,7 +49,8 @@ function renderSidebar(active) {
     ${TOOLS.map((t) => item(t.key, t.href, t.name, t.icon, t.soon)).join('')}
     <div class="spacer"></div>
     ${item('storage', '#/storage', 'Storage', 'storage')}
-    ${item('settings', '#/settings', 'Settings', 'settings')}`;
+    ${item('settings', '#/settings', 'Settings', 'settings')}
+    <div class="side-foot"><b><span class="live"></span>Running on this PC</b>Your videos stay on your computer.</div>`;
 }
 
 // ---------- Router ----------
@@ -135,9 +137,9 @@ async function viewHome() {
       <section class="home-hero">
         <div class="stack" style="gap:10px;max-width:560px">
           <span class="badge blue" style="align-self:flex-start">Video Ranking</span>
-          <h1>Make a ranking video in minutes</h1>
+          <h1>Make a <em>ranking video</em><br />in minutes</h1>
           <p class="muted" style="margin:0;font-size:16px">Paste up to 7 TikTok or YouTube links, put them in order, and ShortsForge trims the best moments, adds your title and rank list, and renders a ready-to-post Short.</p>
-          <div class="row" style="margin-top:6px"><button class="btn primary big" id="homeNew">＋ New ranking video</button>${rankings.length ? '<a class="btn" href="#/ranking">See all rankings</a>' : ''}</div>
+          <div class="row" style="margin-top:6px"><button class="btn primary big" id="homeNew">${icon('plus', 18)} New ranking video</button>${rankings.length ? '<a class="btn" href="#/ranking">See all rankings</a>' : ''}</div>
         </div>
         <ol class="home-steps">
           <li><b>Add videos</b><span>Links or files, ranked #1 to #7</span></li>
