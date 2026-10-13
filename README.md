@@ -10,6 +10,7 @@ You need a Windows PC. An NVIDIA graphics card makes rendering faster but isn't 
 2. Double-click **Start ShortsForge.bat**. The first time, it installs Node.js (if needed) and everything else, which takes a few minutes. Your browser then opens ShortsForge.
    - If Windows shows "Windows protected your PC", click **More info → Run anyway**. This appears because the file was downloaded from the internet.
 3. Keep the black window open while you work. Close it to stop ShortsForge.
+4. Next time, use the **ShortsForge** shortcut on your Desktop. It's added on the first start.
 
 **Getting updates:** close ShortsForge, double-click **Update ShortsForge.bat**, then start it again. Your projects (in the `data` folder) and keys are kept.
 
