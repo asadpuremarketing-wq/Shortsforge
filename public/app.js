@@ -1,6 +1,7 @@
 // ShortsForge front end: sidebar shell + hash router.
 import { $, $$, app, esc, fmtTime, api, toast, getVoices, voiceOptions, runCleanups, poll, openYouTubeUpload } from './core.js';
 import { icon } from './icons.js';
+import { posterCard, projectHref } from './cards.js';
 import { viewCreate, viewProject, viewEditor, STATUS_PILL } from './clips.js';
 import { viewSettings } from './settings.js';
 import { viewRankingHome, viewRankingEditor } from './ranking.js';
@@ -36,6 +37,12 @@ const TOOLS = [
   { key: 'thumbnail', href: '#/thumbnail', name: 'Thumbnail Maker', desc: 'Bold-text YouTube thumbnails and Shorts covers.', icon: 'thumbnail' },
 ];
 
+const GROUPS = [
+  ['Create', ['ranking', 'clipping', 'split']],
+  ['Stories', ['text', 'video', 'commentary']],
+  ['Utilities', ['thumbnail', 'voiceover', 'transcriber']],
+];
+
 function renderSidebar(active) {
   const item = (key, href, label, icon, soon) =>
     soon
@@ -45,8 +52,7 @@ function renderSidebar(active) {
     <a class="brand" href="#/"><span class="logo"><svg viewBox="0 0 32 32"><path d="M12 9l11 7-11 7z" fill="currentColor"/></svg></span>ShortsForge</a>
     ${item('home', '#/', 'Home', 'home')}
     ${item('library', '#/library', 'Library', 'library')}
-    <div class="section">All Tools</div>
-    ${TOOLS.map((t) => item(t.key, t.href, t.name, t.icon, t.soon)).join('')}
+    ${GROUPS.map(([title, keys]) => `<div class="section">${title}</div>${keys.map((k) => TOOLS.find((t) => t.key === k)).map((t) => item(t.key, t.href, t.name, t.icon, t.soon)).join('')}`).join('')}
     <div class="spacer"></div>
     ${item('storage', '#/storage', 'Storage', 'storage')}
     ${item('settings', '#/settings', 'Settings', 'settings')}
@@ -99,34 +105,8 @@ document.addEventListener('click', (e) => {
 
 // ---------- Home ----------
 
-function projectHref(p) {
-  if (p.type === 'ranking') return `#/ranking/${p.id}`;
-  if (p.type === 'transcript') return `#/t/${p.id}`;
-  if (p.type === 'story') return `#/story/${p.story.kind}/${p.id}`;
-  return `#/p/${p.id}`;
-}
 const TYPE_LABEL = { ranking: 'Video Ranking', transcript: 'Transcript', clips: 'Auto Clipping', story: 'Story' };
-
-function projectCard(p) {
-  let thumbs = [];
-  if (p.output?.thumb) thumbs = [`/files/${p.id}/${p.output.thumb}?v=${p.output.version}`];
-  else if (p.clips) thumbs = p.clips.filter((c) => c.thumb).slice(0, 4).map((c) => `/files/${p.id}/${c.thumb}?v=${c.version}`);
-  const meta =
-    p.type === 'story'
-      ? `${{ video: 'Video Story', text: 'Text Story', commentary: 'Commentary' }[p.story.kind]}${p.output ? ` · ${fmtTime(p.output.duration)}` : ''}`
-      : p.type === 'ranking'
-      ? `${p.ranking.items.length} ranked videos${p.output ? ` · ${fmtTime(p.output.duration)}` : ''}`
-      : p.type === 'transcript'
-        ? `${fmtTime(p.source.duration)} audio`
-        : `${p.clips.length} clips · ${fmtTime(p.source.duration)} source`;
-  const pill = p.status === 'draft' ? '<span class="pill">Draft</span>' : STATUS_PILL[p.status] || '';
-  return `
-    <a class="project-card" href="${projectHref(p)}">
-      <div class="thumbs">${thumbs.length ? thumbs.map((t) => `<img src="${t}" alt="" />`).join('') : '<div class="ph"></div><div class="ph"></div><div class="ph"></div>'}</div>
-      <div class="spread"><b>${esc(p.name)}</b>${pill}</div>
-      <span class="muted small"><span class="badge">${TYPE_LABEL[p.type || 'clips']}</span> ${meta} · ${new Date(p.createdAt).toLocaleDateString()}</span>
-    </a>`;
-}
+const projectCard = (p) => posterCard(p);
 
 async function viewHome() {
   const projects = await api('GET', '/api/projects');
@@ -149,7 +129,7 @@ async function viewHome() {
       </section>
       ${
         projects.length
-          ? `<section class="stack"><div class="spread"><h2>Continue where you left off</h2><a href="#/library" class="muted small">Library →</a></div><div class="project-list">${projects.slice(0, 4).map(projectCard).join('')}</div></section>`
+          ? `<section class="stack"><div class="spread"><h2>Continue where you left off</h2><a href="#/library" class="muted small">Library →</a></div><div class="gallery">${projects.slice(0, 5).map(projectCard).join('')}</div></section>`
           : ''
       }
       <section class="stack">
@@ -176,11 +156,40 @@ async function viewHome() {
 // ---------- Library ----------
 
 async function viewLibrary() {
+  const FILTERS = [
+    ['all', 'All', () => true],
+    ['ranking', 'Rankings', (p) => p.type === 'ranking'],
+    ['clips', 'Clips', (p) => !p.type || p.type === 'clips'],
+    ['story', 'Stories', (p) => p.type === 'story'],
+    ['transcript', 'Transcripts', (p) => p.type === 'transcript'],
+  ];
+  let filter = 'all';
+  let projects = [];
+  const draw = () => {
+    const shown = projects.filter(FILTERS.find(([k]) => k === filter)[2]);
+    $('#libFilters').innerHTML = FILTERS.filter(([k, , fn]) => k === 'all' || projects.some(fn))
+      .map(([k, label, fn]) => `<button data-f="${k}" class="${k === filter ? 'on' : ''}">${label}<span>${projects.filter(fn).length}</span></button>`)
+      .join('');
+    $('#libGrid').innerHTML = shown.length
+      ? `<div class="gallery">${shown.map(projectCard).join('')}</div>`
+      : `<div class="empty-state">${icon('film', 30)}<b>Nothing here yet</b><span>Make your first video with Video Ranking.</span><a class="btn primary" href="#/ranking">${icon('plus', 16)} New ranking video</a></div>`;
+  };
+  app.innerHTML = `
+    <header class="page-title">
+      <div><h1>Library</h1><p>Everything you've made on this computer.</p></div>
+      <div class="row"><a class="btn" href="#/clipping">${icon('scissors', 16)} Auto Clipping</a><a class="btn primary" href="#/ranking">${icon('plus', 16)} New ranking</a></div>
+    </header>
+    <nav class="chips" id="libFilters"></nav>
+    <div id="libGrid"></div>`;
+  $('#libFilters').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-f]');
+    if (!b) return;
+    filter = b.dataset.f;
+    draw();
+  });
   const render = async () => {
-    const projects = await api('GET', '/api/projects');
-    app.innerHTML = `
-      <div class="spread" style="margin-bottom:20px"><h1>Library</h1><div class="row"><a class="btn" href="#/clipping">+ Auto Clipping</a><a class="btn primary" href="#/ranking">+ Video Ranking</a></div></div>
-      ${projects.length ? `<div class="project-list">${projects.map(projectCard).join('')}</div>` : '<div class="empty">Nothing here yet. Pick a tool from the sidebar to make your first video.</div>'}`;
+    projects = await api('GET', '/api/projects');
+    draw();
     return projects.some((p) => ['queued', 'processing'].includes(p.status));
   };
   if (await render()) poll(render, 2500);

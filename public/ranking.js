@@ -1,6 +1,7 @@
 // Video Ranking: rank up to 7 videos into one countdown video with a live phone preview.
 import { $, $$, app, esc, fmtTime, api, toast, getStatus, getVoices, voiceOptions, onCleanup, poll } from './core.js';
 import { icon } from './icons.js';
+import { posterCard, newTile } from './cards.js';
 import { makeRich, setRich, colorSelection, serialize, richHTML, plainText, paletteHTML, syncPalette, insertAtCaret, EMOJIS } from './richtext.js';
 
 const DEFAULT_EXTRAS = { rankPop: true, transition: 'flash', sfx: true, announce: false, announceVoice: '', musicVolume: 0.15, watermark: '', markColor: '#ffffff', endText: '', endColor: '#ffffff', endDuration: 2.5 };
@@ -64,43 +65,31 @@ const itemLength = (it) => Math.max(0.5, (it.trimEnd ?? it.duration) - (it.trimS
 
 export async function viewRankingHome() {
   const projects = (await api('GET', '/api/projects')).filter((p) => p.type === 'ranking');
+  const styleBtn = (p) => `<button class="btn sm ghost style-btn" data-style="${p.id}" title="Start a new ranking with this ranking's title style, colors, effects and music">${icon('copy', 15)} Use this style</button>`;
   app.innerHTML = `
-    <div class="stack" style="gap:26px">
-      <div class="spread">
-        <div class="stack" style="gap:6px"><h1>Video Ranking</h1><span class="muted">Rank up to ${MAX} TikTok, Instagram or YouTube videos into one countdown video, ready to upload.</span></div>
-        <button class="btn primary big" id="new">+ New ranking video</button>
+    <header class="page-title">
+      <div><h1>Video Ranking</h1><p>Rank up to ${MAX} TikTok, Instagram or YouTube clips into one countdown Short.</p></div>
+      <button class="btn primary big" id="new">${icon('plus', 18)} New ranking video</button>
+    </header>
+    <ol class="steps-strip">
+      <li>${icon('link', 18)}<div><b>Add clips</b><span>Paste links or drop files</span></div></li>
+      <li>${icon('list', 18)}<div><b>Rank &amp; label</b><span>#1 plays last</span></div></li>
+      <li>${icon('scissors', 18)}<div><b>Auto-trim</b><span>Best moment of each clip</span></div></li>
+      <li>${icon('sparkles', 18)}<div><b>Generate</b><span>1080×1920 MP4</span></div></li>
+    </ol>
+    <section class="stack" style="gap:14px">
+      <h2>Your rankings</h2>
+      <div class="gallery">
+        ${newTile('New ranking video', 'newTile', 'Start from scratch')}
+        ${projects.map((p) => posterCard(p, { action: styleBtn(p) })).join('')}
       </div>
-      <div class="tool-grid">
-        <div class="tool-card"><b>1. Add videos</b><span>Paste links or upload files, and put them in rank order (#1 = best).</span></div>
-        <div class="tool-card"><b>2. Style it</b><span>Title, fonts, colors and rank labels, with a live preview.</span></div>
-        <div class="tool-card"><b>3. Auto best moments</b><span>Each video is trimmed to its most exciting part to fit your target length.</span></div>
-        <div class="tool-card"><b>4. Download</b><span>Get a finished 1080×1920 MP4 for YouTube Shorts, TikTok or Reels.</span></div>
-      </div>
-      <div class="stack">
-        <h2>Recently created</h2>
-        ${
-          projects.length
-            ? `<div class="project-list">${projects
-                .map(
-                  (p) => `
-              <div class="project-card">
-                <a href="#/ranking/${p.id}" class="stack" style="gap:10px;text-decoration:none">
-                  <div class="thumbs">${p.output?.thumb ? `<img src="/files/${p.id}/${p.output.thumb}?v=${p.output.version}" alt="" />` : '<div class="ph"></div>'}</div>
-                  <div class="spread"><b>${esc(p.name)}</b>${p.output ? '<span class="pill ok"><span class="dot"></span>Rendered</span>' : '<span class="pill">Draft</span>'}</div>
-                  <span class="muted small">${p.ranking.items.length} videos · ${new Date(p.createdAt).toLocaleDateString()}</span>
-                </a>
-                <button class="btn sm" data-style="${p.id}" title="Same title style, rank style, effects and music, with no videos">${icon('plus', 16)} New with this style</button>
-              </div>`,
-                )
-                .join('')}</div>`
-            : '<div class="empty">No ranking videos yet.</div>'
-        }
-      </div>
-    </div>`;
-  $('#new').addEventListener('click', async () => {
+    </section>`;
+  const create = async () => {
     const p = await api('POST', '/api/rankings', { name: 'Untitled ranking' });
     location.hash = `#/ranking/${p.id}`;
-  });
+  };
+  $('#new').addEventListener('click', create);
+  $('#newTile').addEventListener('click', create);
   $$('[data-style]').forEach((b) =>
     b.addEventListener('click', async () => {
       const p = await api('POST', '/api/rankings', { fromId: b.dataset.style });
@@ -118,7 +107,7 @@ export async function viewRankingEditor(id) {
   R.extras = { ...DEFAULT_EXTRAS, ...R.extras };
   // Color settings added later: fill them in for older projects.
   R.ranks = { strokeColor: '#000000', popColor: R.ranks.labelColor, ...R.ranks };
-  const ui = { dragTitle: false, collapsed: new Set(), dirtyTrim: new Set(), resetAuto: new Set(), tab: 'preview' };
+  const ui = { dragTitle: false, trimOpen: new Set(), collapsed: new Set(), dirtyTrim: new Set(), resetAuto: new Set(), tab: 'preview' };
 
   const fontOptions = (sel) => fonts.map((f) => `<option value="${esc(f.family)}" style="font-family:'${esc(f.family)}'" ${f.family === sel ? 'selected' : ''}>${esc(f.family)}</option>`).join('');
   const sizeOptions = (sel) => SIZES.map((n) => `<option value="${n}" ${n === sel ? 'selected' : ''}>${n}px</option>`).join('');
@@ -155,8 +144,7 @@ export async function viewRankingEditor(id) {
             <span class="save-state" id="saveState">Saved</span>
           </div>
           <div class="row" style="gap:6px">
-            <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">${icon('undo', 17)}</button>
-            <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y)">${icon('redo', 17)}</button>
+            <div class="tgroup"><button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">${icon('undo', 17)}</button><button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y)">${icon('redo', 17)}</button></div>
             <button class="btn sm" id="newStyle" title="Start a new ranking with this title style, rank style, effects and music">${icon('plus', 16)} New with this style</button>
           </div>
         </div>
@@ -223,7 +211,7 @@ export async function viewRankingEditor(id) {
           <section class="rk-section" data-for="look">
             <div class="section-intro"><div><h2>Look</h2><p>How the clips sit on the 9:16 canvas, and the order they play in.</p></div></div>
             <div class="panel">
-              <div class="setting-row"><span class="label">Video size</span><div class="input-box" style="width:140px"><input type="number" min="20" max="100" data-bind="general.videoHeight" data-num value="${R.general.videoHeight}" /><span class="unit">% of height</span></div></div>
+              <div class="setting-row"><span class="label">Video size</span><div class="slider-box"><span class="small muted">Smaller</span><input type="range" min="40" max="100" step="1" data-bind="general.videoHeight" data-num value="${R.general.videoHeight}" /><span class="small muted">Full height</span><output data-out="general.videoHeight">${R.general.videoHeight}</output><span class="small muted">%</span></div></div>
               <div class="setting-row"><span class="label">Video fit</span><div class="seg" id="fitSeg"><button data-v="cover">Fill (crop edges)</button><button data-v="contain">Fit whole video</button></div></div>
               <div class="setting-row"><span class="label">Background</span><div class="color-row">${colorBtn('general.background', R.general.background, 'Behind the video')}</div></div>
               <div class="setting-row"><span class="label">Captions</span><div class="row" style="gap:12px">${toggle('general.captions', R.general.captions, 'Add spoken-word captions')}<select data-bind="general.captionStyle" id="capStyle" style="width:auto" ${R.general.captions ? '' : 'hidden'}>${Object.entries(s.captionStyles)
@@ -280,8 +268,13 @@ export async function viewRankingEditor(id) {
               <div class="pv-ranks" id="pvRanks"></div>
             </div>
           </div>
-          <div class="pv-controls"><button class="btn sm primary" id="pvPlay">${icon('play', 14)} Play preview</button><button class="btn sm ghost icon-only" id="pvMute" title="Sound">${icon('volume', 17)}</button><span class="muted small" id="pvTime"></span></div>
-          <span class="hint" style="max-width:330px;text-align:center"><span class="kbd">Space</span> play / stop · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> generate · captions appear in the final video only</span>
+          <div class="player-bar">
+            <button class="play-circle" id="pvPlay" title="Play / stop (Space)">${icon('play', 16)}<span class="sr">Play preview</span></button>
+            <div class="scrub"><div class="scrub-fill" id="pvProg"></div></div>
+            <span class="pv-time" id="pvTime"></span>
+            <button class="icon-round" id="pvMute" title="Sound">${icon('volume', 17)}</button>
+          </div>
+          <span class="hint pv-hint"><span class="kbd">Space</span> play · <span class="kbd">Ctrl</span> <span class="kbd">Enter</span> generate</span>
         </div>
         <div id="tabFinal" class="stack" style="align-items:center;gap:14px"></div>
       </aside>
@@ -839,8 +832,13 @@ export async function viewRankingEditor(id) {
     if (it.status === 'processing' || it.status === 'analyzing') return '<div class="rc-status"><div class="spinner sm"></div>Finding the best moment…</div>';
     if (it.status === 'error') return `<div class="banner err small"><div><b>Couldn't use this video.</b> ${esc(it.error || 'Something went wrong.')} Remove it and try another link, or upload the file.</div></div>`;
     return `
-      <div class="trim">
-        <div class="trim-top"><span class="label">Trim</span><span data-mode class="badge"></span><span class="hint" data-info></span></div>
+      <div class="trim ${ui.trimOpen.has(it.id) ? 'open' : ''}">
+        <div class="trim-top">
+          ${icon('scissors', 16)}<span class="trim-range" data-range></span><span data-mode class="badge"></span><span class="hint" data-info></span>
+          <span class="grow"></span>
+          <button class="btn sm trim-toggle" data-act="toggleTrim">${ui.trimOpen.has(it.id) ? 'Done' : 'Edit trim'}${icon('chevron', 14)}</button>
+        </div>
+        <div class="trim-body">
         <div class="moment" data-moment="${it.id}" title="Drag the yellow edges to trim · drag the middle to move · click elsewhere to jump the video there">
           <div class="bars"></div>
           <div class="win"><div class="h l" title="Drag to set the start"></div><div class="h r" title="Drag to set the end"></div></div>
@@ -855,6 +853,7 @@ export async function viewRankingEditor(id) {
           <button class="btn sm ghost" data-act="auto" title="Let ShortsForge pick the best moment again">${icon('refresh', 15)} Auto-pick</button>
         </div>
         ${it.ai?.reason ? `<span class="hint" style="color:#5b3fd9">${icon('sparkles', 14)} AI saw: ${esc(it.ai.reason)} (payoff at ${fmtTime(it.ai.peak, true)})</span>` : ''}
+        </div>
       </div>`;
   }
 
@@ -1047,7 +1046,9 @@ export async function viewRankingEditor(id) {
     win.style.left = `${(it.trimStart / it.duration) * 100}%`;
     win.style.width = `${((it.trimEnd - it.trimStart) / it.duration) * 100}%`;
     const card = box.closest('.rank-card');
-    $('[data-info]', card).textContent = `using ${itemLength(it).toFixed(1)}s of ${it.duration.toFixed(1)}s`;
+    $('[data-info]', card).textContent = `${itemLength(it).toFixed(1)}s of ${it.duration.toFixed(1)}s`;
+    const range = $('[data-range]', card);
+    if (range) range.textContent = `${fmtTime(it.trimStart, true)} – ${fmtTime(it.trimEnd, true)}`;
     const chip = $('.rc-head .chip', card);
     if (chip) chip.textContent = `${itemLength(it).toFixed(1)}s`;
     const mode = $('[data-mode]', card);
@@ -1152,6 +1153,13 @@ export async function viewRankingEditor(id) {
       save();
     } else if (act === 'play') playSequence([idx]);
     else if (act === 'playTrim') playTrimmed(R.items[idx]);
+    else if (act === 'toggleTrim') {
+      const open = !ui.trimOpen.has(itemId);
+      open ? ui.trimOpen.add(itemId) : ui.trimOpen.delete(itemId);
+      const trim = $('.trim', card);
+      trim.classList.toggle('open', open);
+      e.target.closest('button').innerHTML = `${open ? 'Done' : 'Edit trim'}${icon('chevron', 14)}`;
+    }
     else if (act === 'setStart' || act === 'setEnd') {
       const it = R.items[idx];
       const v = vidOf(it.id);
@@ -1452,7 +1460,8 @@ export async function viewRankingEditor(id) {
       renderTabs();
     }
     Object.assign(player, { playing: true, seq, k: 0, revealed: new Set() });
-    $('#pvPlay').innerHTML = `${icon('stop', 13)} Stop`;
+    $('#pvPlay').innerHTML = `${icon('stop', 14)}<span class="sr">Stop</span>`;
+    $('#pvPlay').classList.add('on');
     startCurrent();
   }
   const restartAnim = (el, cls) => {
@@ -1492,7 +1501,8 @@ export async function viewRankingEditor(id) {
     player.playing = false;
     player.revealed = null;
     pv.pause();
-    $('#pvPlay').innerHTML = `${icon('play', 14)} Play preview`;
+    $('#pvPlay').innerHTML = `${icon('play', 16)}<span class="sr">Play preview</span>`;
+    $('#pvPlay').classList.remove('on');
     drawPreview();
     idleFrame();
   }
@@ -1537,6 +1547,8 @@ export async function viewRankingEditor(id) {
       if (it) elapsed += Math.max(0, pv.currentTime - (it.trimStart || 0));
     }
     $('#pvTime').textContent = `${fmtTime(elapsed)} / ${fmtTime(total)}`;
+    const prog = $('#pvProg');
+    if (prog) prog.style.width = `${total ? Math.min(100, (elapsed / total) * 100) : 0}%`;
   }
   $('#pvPlay').addEventListener('click', () => (player.playing ? stopPlay() : playSequence(playOrder())));
   $('#pvMute').addEventListener('click', () => {
@@ -1586,7 +1598,7 @@ export async function viewRankingEditor(id) {
     fin.dataset.sig = sig;
     if (P.output) {
       fin.innerHTML = `
-        <video class="final-video" src="/files/${id}/${P.output.file}?v=${P.output.version}" controls playsinline></video>
+        <div class="phone-frame"><video class="final-video" src="/files/${id}/${P.output.file}?v=${P.output.version}" controls playsinline></video></div>
         <div class="row" style="justify-content:center">
           <a class="btn primary" href="/files/${id}/${P.output.file}?download=1">${icon('download', 16)} Download MP4</a>
           <button class="btn" data-yt-project="${id}" data-yt-file="${P.output.file}" data-yt-title="${esc(plainText(R.title.text))}">${icon('youtube', 17)} Upload to YouTube</button>
