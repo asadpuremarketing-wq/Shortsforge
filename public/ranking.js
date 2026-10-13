@@ -117,7 +117,7 @@ export async function viewRankingEditor(id) {
   R.extras = { ...DEFAULT_EXTRAS, ...R.extras };
   // Color settings added later: fill them in for older projects.
   R.ranks = { strokeColor: '#000000', popColor: R.ranks.labelColor, ...R.ranks };
-  const ui = { dragTitle: false, collapsed: new Set(), dirtyTrim: new Set(), resetAuto: new Set(), tab: P.output ? 'final' : 'preview' };
+  const ui = { dragTitle: false, collapsed: new Set(), dirtyTrim: new Set(), resetAuto: new Set(), tab: 'preview' };
 
   const fontOptions = (sel) => fonts.map((f) => `<option value="${esc(f.family)}" style="font-family:'${esc(f.family)}'" ${f.family === sel ? 'selected' : ''}>${esc(f.family)}</option>`).join('');
   const sizeOptions = (sel) => SIZES.map((n) => `<option value="${n}" ${n === sel ? 'selected' : ''}>${n}px</option>`).join('');
@@ -125,129 +125,149 @@ export async function viewRankingEditor(id) {
   const emojiButton = (target) => `<button type="button" class="btn sm emoji-btn" data-emoji-for="${esc(target)}" title="Insert an emoji at the cursor">😀 Emoji</button>`;
   const toggle = (bind, checked, label) => `<label class="toggle-row"><span class="switch"><input type="checkbox" data-bind="${bind}" ${checked ? 'checked' : ''} /><span></span></span>${label}</label>`;
 
+  const colorBtn = (target, current, label) => `<button type="button" class="color-btn" data-color-for="${esc(target)}" title="${esc(label)}: click to change"><span class="sw" style="background:${esc(current)}"></span><span>${label}</span></button>`;
+  const targetOptions = (TARGETS.some(([v]) => v === R.general.targetLength) ? TARGETS : [...TARGETS, [R.general.targetLength, `${R.general.targetLength} seconds`]].sort((a, b) => a[0] - b[0]))
+    .map(([v, l]) => `<option value="${v}" ${v === R.general.targetLength ? 'selected' : ''}>${l}</option>`)
+    .join('');
+  const TABS = [
+    ['videos', '🎬', 'Videos'],
+    ['title', '✏️', 'Title'],
+    ['ranks', '🔢', 'Rank list'],
+    ['look', '🎨', 'Look'],
+    ['effects', '✨', 'Effects & audio'],
+  ];
+  let section = (() => {
+    try {
+      return R.items.length ? localStorage.getItem('sf.rankTab') || 'videos' : 'videos';
+    } catch {
+      return 'videos';
+    }
+  })();
+
   app.innerHTML = `
     <div class="rk">
       <div class="rk-main">
-        <div class="page-head">
-          <div class="row" style="gap:14px;flex:1;min-width:0">
-            <h1>Video Ranking</h1>
-            <input type="text" id="pname" value="${esc(P.name)}" style="max-width:320px;padding:8px 12px" title="Project name" />
+        <div class="page-head rk-head">
+          <div class="row" style="gap:12px;flex:1;min-width:0">
+            <a href="#/ranking" class="back" title="All rankings">←</a>
+            <input type="text" id="pname" class="name-input" value="${esc(P.name)}" title="Rename this ranking" placeholder="Untitled ranking" />
+            <span class="save-state" id="saveState">Saved</span>
           </div>
-          <div class="row" style="gap:8px"><button class="btn sm" id="newStyle" title="Start a new ranking with this title style, rank style, effects and music">＋ New with this style</button><a class="btn sm" href="#/ranking">🕘 Recently Created</a></div>
+          <div class="row" style="gap:6px">
+            <button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">↶</button>
+            <button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y)">↷</button>
+            <button class="btn sm" id="newStyle" title="Start a new ranking with this title style, rank style, effects and music">＋ New with this style</button>
+          </div>
         </div>
+        <nav class="rk-tabs" id="rkTabs">${TABS.map(([k, ic, name]) => `<button data-section="${k}"><span class="ic">${ic}</span>${name}${k === 'videos' ? ' <span class="count" id="videoCount"></span>' : ''}</button>`).join('')}</nav>
         <div class="content">
 
-          <section class="panel">
-            <div class="panel-head"><h2>Video Ranking Title</h2>${toggle('ui.dragTitle', ui.dragTitle, '<span class="muted">Drag Title</span>')}</div>
-            <div class="toolbar">
-              <div class="tgroup"><select data-bind="title.font">${fontOptions(R.title.font)}</select><select data-bind="title.size" data-num>${sizeOptions(R.title.size)}</select></div>
-              <div class="tgroup"><button class="tbtn" data-toggle="title.bold" title="Bold">B</button><button class="tbtn" data-toggle="title.italic" title="Italic"><i>I</i></button></div>
-              <div class="tgroup">
-                <button class="tbtn" data-align="left" title="Align left">${I.alignL}</button>
-                <button class="tbtn" data-align="center" title="Center">${I.alignC}</button>
-                <button class="tbtn" data-align="right" title="Align right">${I.alignR}</button>
-              </div>
-              <div class="tgroup"><button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">↶</button><button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y)">↷</button></div>
-              ${s.llm ? '<button class="btn sm ai-btn" id="suggestTitle">✨ Suggest titles</button>' : ''}
-            </div>
-            <div class="title-edit rich" id="titleText"></div>
-            <div class="color-grid">
-              <div class="cfield"><span class="label">Text color <span class="hint">· select words first to color only them</span></span><div class="row" style="gap:10px">${paletteHTML('title', R.title.color)}${emojiButton('title')}</div></div>
-              <div class="cfield"><span class="label">Outline color</span>${paletteHTML('title.strokeColor', R.title.strokeColor)}</div>
-              <div class="cfield"><span class="label">Background box <button class="btn sm" id="bgNone" style="margin-left:6px">None</button></span>${paletteHTML('title.bg', R.title.bg || '#000000')}</div>
-            </div>
-            <div class="stack" style="gap:8px">
-              <span class="label">Outline thickness</span>
-              <div class="slider-box" style="max-width:460px"><input type="range" min="0" max="6" step="0.5" data-bind="title.strokeWidth" data-num value="${R.title.strokeWidth}" /><output data-out="title.strokeWidth">${R.title.strokeWidth}</output></div>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head"><h2>Rank Numbers</h2>${toggle('ranks.show', R.ranks.show, '<span class="muted">Show</span>')}</div>
-            <div class="toolbar">
-              <div class="tgroup"><select data-bind="ranks.font">${fontOptions(R.ranks.font)}</select><select data-bind="ranks.size" data-num>${sizeOptions(R.ranks.size)}</select></div>
-            </div>
-            <div class="color-grid">
-              <div class="cfield"><span class="label">Number color</span>${paletteHTML('ranks.numberColor', R.ranks.numberColor)}</div>
-              <div class="cfield"><span class="label">Label color <span class="hint">· all ranks; each rank can override below</span></span>${paletteHTML('ranks.labelColor', R.ranks.labelColor)}</div>
-              <div class="cfield"><span class="label">Outline color</span>${paletteHTML('ranks.strokeColor', R.ranks.strokeColor || '#000000')}</div>
-              <div class="cfield"><span class="label">Big pop-up number color</span>${paletteHTML('ranks.popColor', R.ranks.popColor || R.ranks.labelColor)}</div>
-            </div>
-            <div class="stack" style="gap:8px">
-              <span class="label">Outline thickness</span>
-              <div class="slider-box" style="max-width:460px"><input type="range" min="0" max="6" step="0.5" data-bind="ranks.strokeWidth" data-num value="${R.ranks.strokeWidth}" /><output data-out="ranks.strokeWidth">${R.ranks.strokeWidth}</output></div>
-            </div>
-            <div class="stack" style="gap:8px">
-              <span class="label">How long labels stay on screen</span>
+          <section class="rk-section" data-for="videos">
+            <div class="section-intro">
+              <div><h2>Your ranked videos</h2><p>Add up to ${MAX} clips. #1 is the best: by default it plays last.</p></div>
               <div class="row" style="gap:10px">
-                <div class="seg" id="labelModeSeg"><button data-v="stay">Until the end</button><button data-v="during">Only while its clip plays</button><button data-v="seconds">For a few seconds</button></div>
-                <div class="input-box" id="labelSecsBox" style="width:130px"><input type="number" min="0.5" max="30" step="0.5" data-bind="ranks.labelSeconds" data-num value="${R.ranks.labelSeconds ?? 3}" /><span class="unit">sec</span></div>
+                <label class="inline-field">Target length<select data-bind="general.targetLength" data-num>${targetOptions}</select></label>
+                <button class="btn sm ghost danger" id="removeAll">Remove all</button>
               </div>
             </div>
-            <span class="muted small">Tip: drag the rank list in the preview to move it. Each label appears when its video starts playing.</span>
+            <div class="stack" id="items" style="gap:12px"></div>
           </section>
 
-          <section class="panel">
-            <div class="panel-head"><h2>General Setting</h2></div>
-            <div class="two">
-              <div class="stack" style="gap:8px"><span class="label">Video height</span><div class="input-box"><input type="number" min="20" max="100" data-bind="general.videoHeight" data-num value="${R.general.videoHeight}" /><span class="unit">%</span></div></div>
-              <div class="stack" style="gap:8px"><span class="label">Background color <span class="hint">· behind the video</span></span>${paletteHTML('general.background', R.general.background)}</div>
-              <div class="stack" style="gap:8px"><span class="label">Target video length</span><div class="input-box"><select data-bind="general.targetLength" data-num>${(TARGETS.some(([v]) => v === R.general.targetLength) ? TARGETS : [...TARGETS, [R.general.targetLength, `${R.general.targetLength} seconds`]].sort((a, b) => a[0] - b[0])).map(([v, l]) => `<option value="${v}" ${v === R.general.targetLength ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
-              <div class="stack" style="gap:8px"><span class="label">Video fit</span><div class="seg" id="fitSeg"><button data-v="cover">Fill</button><button data-v="contain">Fit whole video</button></div></div>
+          <section class="rk-section" data-for="title">
+            <div class="section-intro"><div><h2>Title</h2><p>Shown at the top for the whole video. Select words to color them separately.</p></div>${s.llm ? '<button class="btn sm ai-btn" id="suggestTitle">✨ Suggest titles</button>' : ''}</div>
+            <div class="panel">
+              <div class="toolbar">
+                <div class="tgroup"><select data-bind="title.font" title="Font">${fontOptions(R.title.font)}</select><select data-bind="title.size" data-num title="Size">${sizeOptions(R.title.size)}</select></div>
+                <div class="tgroup"><button class="tbtn" data-toggle="title.bold" title="Bold">B</button><button class="tbtn" data-toggle="title.italic" title="Italic"><i>I</i></button></div>
+                <div class="tgroup">
+                  <button class="tbtn" data-align="left" title="Align left">${I.alignL}</button>
+                  <button class="tbtn" data-align="center" title="Center">${I.alignC}</button>
+                  <button class="tbtn" data-align="right" title="Align right">${I.alignR}</button>
+                </div>
+                ${emojiButton('title')}
+              </div>
+              <div class="title-edit rich" id="titleText"></div>
+              <div class="color-row">
+                ${colorBtn('title', R.title.color, 'Text')}
+                ${colorBtn('title.strokeColor', R.title.strokeColor, 'Outline')}
+                ${colorBtn('title.bg', R.title.bg || '#000000', 'Background box')}
+                <button class="btn sm ghost" id="bgNone">No box</button>
+              </div>
+              <div class="setting-row"><span class="label">Outline thickness</span><div class="slider-box"><input type="range" min="0" max="6" step="0.5" data-bind="title.strokeWidth" data-num value="${R.title.strokeWidth}" /><output data-out="title.strokeWidth">${R.title.strokeWidth}</output></div></div>
+              <div class="setting-row"><span class="label">Position</span>${toggle('ui.dragTitle', ui.dragTitle, 'Drag the title in the preview to move it')}</div>
             </div>
-            <div class="row" style="gap:24px">
-              ${toggle('general.captions', R.general.captions, 'Enable Caption')}
-              <select data-bind="general.captionStyle" id="capStyle" style="width:auto" ${R.general.captions ? '' : 'hidden'}>${Object.entries(s.captionStyles)
+          </section>
+
+          <section class="rk-section" data-for="ranks">
+            <div class="section-intro"><div><h2>Rank list</h2><p>The numbers down the side. Each label appears when its clip starts. Drag the list in the preview to move it.</p></div>${toggle('ranks.show', R.ranks.show, 'Show')}</div>
+            <div class="panel">
+              <div class="toolbar"><div class="tgroup"><select data-bind="ranks.font" title="Font">${fontOptions(R.ranks.font)}</select><select data-bind="ranks.size" data-num title="Size">${sizeOptions(R.ranks.size)}</select></div></div>
+              <div class="color-row">
+                ${colorBtn('ranks.numberColor', R.ranks.numberColor, 'Numbers')}
+                ${colorBtn('ranks.labelColor', R.ranks.labelColor, 'Labels')}
+                ${colorBtn('ranks.strokeColor', R.ranks.strokeColor || '#000000', 'Outline')}
+                ${colorBtn('ranks.popColor', R.ranks.popColor || R.ranks.labelColor, 'Pop-up number')}
+              </div>
+              <div class="setting-row"><span class="label">Outline thickness</span><div class="slider-box"><input type="range" min="0" max="6" step="0.5" data-bind="ranks.strokeWidth" data-num value="${R.ranks.strokeWidth}" /><output data-out="ranks.strokeWidth">${R.ranks.strokeWidth}</output></div></div>
+              <div class="setting-row"><span class="label">Labels stay on screen</span>
+                <div class="row" style="gap:10px">
+                  <div class="seg" id="labelModeSeg"><button data-v="stay">Until the end</button><button data-v="during">While its clip plays</button><button data-v="seconds">For a few seconds</button></div>
+                  <div class="input-box" id="labelSecsBox" style="width:120px"><input type="number" min="0.5" max="30" step="0.5" data-bind="ranks.labelSeconds" data-num value="${R.ranks.labelSeconds ?? 3}" /><span class="unit">sec</span></div>
+                </div>
+              </div>
+              <span class="hint">Tip: each rank card on the Videos tab can have its own label color and font.</span>
+            </div>
+          </section>
+
+          <section class="rk-section" data-for="look">
+            <div class="section-intro"><div><h2>Look</h2><p>How the clips sit on the 9:16 canvas, and the order they play in.</p></div></div>
+            <div class="panel">
+              <div class="setting-row"><span class="label">Video size</span><div class="input-box" style="width:140px"><input type="number" min="20" max="100" data-bind="general.videoHeight" data-num value="${R.general.videoHeight}" /><span class="unit">% of height</span></div></div>
+              <div class="setting-row"><span class="label">Video fit</span><div class="seg" id="fitSeg"><button data-v="cover">Fill (crop edges)</button><button data-v="contain">Fit whole video</button></div></div>
+              <div class="setting-row"><span class="label">Background</span><div class="color-row">${colorBtn('general.background', R.general.background, 'Behind the video')}</div></div>
+              <div class="setting-row"><span class="label">Captions</span><div class="row" style="gap:12px">${toggle('general.captions', R.general.captions, 'Add spoken-word captions')}<select data-bind="general.captionStyle" id="capStyle" style="width:auto" ${R.general.captions ? '' : 'hidden'}>${Object.entries(s.captionStyles)
                 .filter(([k]) => k !== 'none')
                 .map(([k, v]) => `<option value="${k}" ${k === R.general.captionStyle ? 'selected' : ''}>${esc(v)}</option>`)
-                .join('')}</select>
+                .join('')}</select></div></div>
+              <div class="setting-row"><span class="label">Playback order</span>
+                <div class="stack" style="gap:8px">
+                  ${toggle('playback.custom', R.playback.custom, 'Choose the order myself')}
+                  <div id="orderRow" ${R.playback.custom ? '' : 'hidden'}><div class="seg" id="orderSeg"><button data-v="countdown">Countdown (last → #1)</button><button data-v="ascending">In order (#1 → last)</button></div></div>
+                  <span class="hint" id="orderHelp"></span>
+                </div>
+              </div>
             </div>
           </section>
 
-          <section class="panel">
-            <div class="panel-head"><h2>Playback Order</h2>${toggle('playback.custom', R.playback.custom, '<span class="muted">Custom Playback Order</span>')}</div>
-            <div id="orderRow" ${R.playback.custom ? '' : 'hidden'}>
-              <div class="seg" id="orderSeg"><button data-v="countdown">Countdown (last → #1)</button><button data-v="ascending">In order (#1 → last)</button></div>
-            </div>
-            <span class="muted small" id="orderHelp"></span>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head"><h2>Effects &amp; Audio</h2></div>
-            <div class="two">
-              <div class="stack" style="gap:8px"><span class="label">Transition between ranks</span><div class="seg" id="transSeg"><button data-v="none">Cut</button><button data-v="flash">White flash</button><button data-v="dip">Dip to black</button></div></div>
-              <div class="stack" style="gap:12px;justify-content:flex-end">
-                ${toggle('extras.rankPop', R.extras.rankPop, 'Big rank number pop-up')}
-                ${toggle('extras.sfx', R.extras.sfx, 'Whoosh sound on transitions')}
-              </div>
-            </div>
-            <div class="two">
-              <div class="stack" style="gap:8px">
-                ${toggle('extras.announce', R.extras.announce, 'Voice says "Number 3!" at each rank')}
-                <select data-bind="extras.announceVoice" id="annVoice" ${R.extras.announce ? '' : 'hidden'}><option value="">Auto voice</option>${voiceOptions(voices, R.extras.announceVoice)}</select>
-              </div>
-              <div class="stack" style="gap:8px">
-                <span class="label">Background music</span>
+          <section class="rk-section" data-for="effects">
+            <div class="section-intro"><div><h2>Effects &amp; audio</h2><p>Extra polish between ranks, sound, and the ending.</p></div></div>
+            <div class="panel">
+              <div class="setting-row"><span class="label">Between ranks</span><div class="seg" id="transSeg"><button data-v="none">Cut</button><button data-v="flash">White flash</button><button data-v="dip">Dip to black</button></div></div>
+              <div class="setting-row"><span class="label">Extras</span><div class="stack" style="gap:10px">
+                ${toggle('extras.rankPop', R.extras.rankPop, 'Big rank number pops up')}
+                ${toggle('extras.sfx', R.extras.sfx, 'Whoosh sound on each change')}
+                ${toggle('extras.announce', R.extras.announce, 'A voice says "Number 3!"')}
+                <select data-bind="extras.announceVoice" id="annVoice" style="max-width:320px" ${R.extras.announce ? '' : 'hidden'}><option value="">Auto voice</option>${voiceOptions(voices, R.extras.announceVoice)}</select>
+              </div></div>
+              <div class="setting-row"><span class="label">Background music</span><div class="stack" style="gap:8px">
                 <div class="row" id="musicRow"></div>
                 <div class="slider-box" id="musicVol"><span class="small muted">Volume</span><input type="range" min="0" max="0.6" step="0.01" data-bind="extras.musicVolume" data-num value="${R.extras.musicVolume}" /><output data-out="extras.musicVolume">${Math.round(R.extras.musicVolume * 100)}</output></div>
                 <input type="file" id="musicIn" accept="audio/*,video/*" hidden />
-              </div>
-            </div>
-            <div class="two">
-              <div class="cfield"><label class="field">Watermark<input type="text" data-bind="extras.watermark" value="${esc(R.extras.watermark)}" placeholder="@yourchannel" maxlength="40" /></label>${paletteHTML('extras.markColor', R.extras.markColor || '#ffffff')}</div>
-              <div class="cfield"><span class="label">End screen text <span class="hint">· select words to color them</span></span><div class="rich" id="endText"></div><div class="row" style="gap:10px">${paletteHTML('end', R.extras.endColor || '#ffffff')}${emojiButton('end')}</div></div>
+              </div></div>
+              <div class="setting-row"><span class="label">Watermark</span><div class="row" style="gap:10px"><input type="text" data-bind="extras.watermark" value="${esc(R.extras.watermark)}" placeholder="@yourchannel" maxlength="40" style="max-width:260px" />${colorBtn('extras.markColor', R.extras.markColor || '#ffffff', 'Color')}</div></div>
+              <div class="setting-row"><span class="label">End screen</span><div class="stack" style="gap:8px;flex:1">
+                <div class="rich" id="endText"></div>
+                <div class="row" style="gap:8px">${colorBtn('end', R.extras.endColor || '#ffffff', 'Text color')}${emojiButton('end')}<span class="hint">Shown for 2.5 s after the last clip. Leave empty for no end screen.</span></div>
+              </div></div>
             </div>
           </section>
-
-          <div class="spread" id="itemsHead"><h2>Ranked videos</h2><button class="btn sm ghost danger" id="removeAll">🗑 Remove all videos</button></div>
-          <div class="stack" id="items" style="gap:14px"></div>
         </div>
         <div class="render-bar" id="renderBar"></div>
       </div>
 
       <aside class="rk-preview">
-        <div class="pv-tabs"><button data-tab="preview">Preview</button><button data-tab="final">Final video</button></div>
-        <div id="tabPreview" class="stack" style="align-items:center;gap:14px">
+        <div class="pv-tabs"><button data-tab="preview">Live preview</button><button data-tab="final">Final video <span class="dot-ready" id="finalDot" hidden></span></button></div>
+        <div id="tabPreview" class="stack" style="align-items:center;gap:12px">
           <div class="phone-frame">
             <div class="canvas" id="canvas">
               <video class="pv-video" id="pv" playsinline preload="metadata"></video>
@@ -259,8 +279,8 @@ export async function viewRankingEditor(id) {
               <div class="pv-ranks" id="pvRanks"></div>
             </div>
           </div>
-          <div class="pv-controls"><button class="btn sm" id="pvPlay">▶ Play preview</button><button class="btn sm ghost" id="pvMute" title="Sound">🔊</button><span class="muted small" id="pvTime"></span></div>
-          <span class="muted small" style="max-width:340px;text-align:center">The preview plays each video's selected moment in playback order. Captions are added in the final render.</span>
+          <div class="pv-controls"><button class="btn sm primary" id="pvPlay">▶ Play preview</button><button class="btn sm ghost" id="pvMute" title="Sound">🔊</button><span class="muted small" id="pvTime"></span></div>
+          <span class="hint" style="max-width:330px;text-align:center"><span class="kbd">Space</span> play / stop · <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> generate · captions appear in the final video only</span>
         </div>
         <div id="tabFinal" class="stack" style="align-items:center;gap:14px"></div>
       </aside>
@@ -293,7 +313,13 @@ export async function viewRankingEditor(id) {
     $$('#labelModeSeg button').forEach((b) => b.classList.toggle('selected', (R.ranks.labelMode || 'stay') === b.dataset.v));
     $('#labelSecsBox').hidden = R.ranks.labelMode !== 'seconds';
     $('#bgNone').classList.toggle('on', !R.title.bg);
-    $('#bgNone').textContent = R.title.bg ? 'Remove' : 'None';
+    $('#bgNone').textContent = R.title.bg ? 'Remove box' : 'No box';
+    $$('.color-btn[data-color-for]').forEach((b) => {
+      const target = b.dataset.colorFor;
+      const none = target === 'title.bg' && !R.title.bg;
+      b.querySelector('.sw').style.background = none ? 'repeating-linear-gradient(45deg,#c3cde3 0 4px,transparent 4px 8px)' : paletteColor(target);
+      b.classList.toggle('is-none', none);
+    });
     $('#capStyle').hidden = !R.general.captions;
     $('#orderRow').hidden = !R.playback.custom;
     const countdown = !R.playback.custom || R.playback.order === 'countdown';
@@ -625,8 +651,90 @@ export async function viewRankingEditor(id) {
     } else if (t.dataset.tab) {
       ui.tab = t.dataset.tab;
       renderTabs();
-    }
+    } else if (t.dataset.section) showSection(t.dataset.section);
+    else if (t.dataset.colorFor) openColorPicker(t);
   }
+
+  // ---------- Sections (tabs) ----------
+
+  function showSection(key) {
+    section = key;
+    $$('.rk-section').forEach((s) => (s.hidden = s.dataset.for !== key));
+    $$('#rkTabs [data-section]').forEach((b) => b.classList.toggle('on', b.dataset.section === key));
+    try {
+      localStorage.setItem('sf.rankTab', key);
+    } catch {
+      /* private mode: fine */
+    }
+    window.scrollTo({ top: 0 });
+  }
+
+  // ---------- Color picker popover ----------
+
+  function openColorPicker(btn) {
+    closeColorPicker();
+    const target = btn.dataset.colorFor;
+    const current = paletteColor(target);
+    const isText = target === 'title' || target === 'end' || target.startsWith('label:');
+    const pop = document.createElement('div');
+    pop.className = 'color-pop';
+    pop.innerHTML = `
+      ${isText ? '<div class="hint" style="margin-bottom:8px">Selected words only, or the whole text if nothing is selected.</div>' : ''}
+      ${paletteHTML(target, current)}
+      <div class="row" style="gap:8px;margin-top:10px"><span class="hint">Hex</span><input type="text" class="hex-in" value="${esc(current)}" maxlength="7" spellcheck="false" /></div>`;
+    app.appendChild(pop); // inside #app so the palette click handlers apply
+    syncPalette(pop.querySelector('.palette'), current);
+    const r = btn.getBoundingClientRect();
+    pop.style.left = `${Math.max(12, Math.min(window.innerWidth - pop.offsetWidth - 12, r.left))}px`;
+    const below = r.bottom + 8 + pop.offsetHeight < window.innerHeight;
+    pop.style.top = `${below ? r.bottom + 8 : r.top - pop.offsetHeight - 8}px`;
+    const hex = pop.querySelector('.hex-in');
+    hex.addEventListener('change', () => {
+      const v = hex.value.trim().replace(/^([0-9a-f]{6})$/i, '#$1');
+      if (/^#[0-9a-f]{6}$/i.test(v)) applyColor(target, v.toLowerCase());
+      else toast('Use a hex color like #ff3b30', true);
+    });
+    // Picking a preset closes the popover; the custom wheel and hex box keep it open.
+    pop.addEventListener('click', (e) => {
+      if (e.target.closest('.dot[data-color]')) setTimeout(closeColorPicker, 0);
+    });
+  }
+  function closeColorPicker() {
+    $('.color-pop')?.remove();
+  }
+  const onOutsidePicker = (e) => {
+    if (!e.target.closest('.color-pop, [data-color-for]')) closeColorPicker();
+  };
+  const onColorBtnDown = (e) => {
+    if (e.target.closest('[data-color-for]')) e.preventDefault(); // keep the word selection in the text box
+  };
+  document.addEventListener('mousedown', onOutsidePicker);
+  app.addEventListener('mousedown', onColorBtnDown);
+  window.addEventListener('scroll', closeColorPicker, true);
+  onCleanup(() => {
+    document.removeEventListener('mousedown', onOutsidePicker);
+    app.removeEventListener('mousedown', onColorBtnDown);
+    window.removeEventListener('scroll', closeColorPicker, true);
+    closeColorPicker();
+  });
+
+  // ---------- Keyboard shortcuts ----------
+
+  const typing = () => {
+    const a = document.activeElement;
+    return a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
+  };
+  const onShortcut = (e) => {
+    if (e.code === 'Space' && !typing() && !e.target.closest?.('button, video')) {
+      e.preventDefault();
+      $('#pvPlay')?.click();
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      $('#renderBtn')?.click();
+    }
+  };
+  document.addEventListener('keydown', onShortcut);
+  onCleanup(() => document.removeEventListener('keydown', onShortcut));
 
   // ---------- Saving ----------
 
@@ -635,6 +743,7 @@ export async function viewRankingEditor(id) {
   function scheduleSave() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(save, 600);
+    setSaveState('pending');
   }
   function save() {
     clearTimeout(saveTimer);
@@ -657,14 +766,25 @@ export async function viewRankingEditor(id) {
     };
     ui.resetAuto.clear();
     const sentTrims = new Set(ui.dirtyTrim);
+    setSaveState('saving');
     saving = saving
       .then(() => api('PUT', `/api/rankings/${id}`, payload))
       .then((fresh) => {
         sentTrims.forEach((x) => ui.dirtyTrim.delete(x));
         merge(fresh);
+        setSaveState(saveTimer ? 'pending' : 'saved');
       })
-      .catch((err) => toast(err.message, true));
+      .catch((err) => {
+        setSaveState('error');
+        toast(err.message, true);
+      });
     return saving;
+  }
+  function setSaveState(state) {
+    const el = $('#saveState');
+    if (!el) return;
+    el.dataset.state = state;
+    el.textContent = { saving: 'Saving…', pending: 'Unsaved changes', saved: 'All changes saved', error: 'Not saved: check the server' }[state];
   }
   onCleanup(() => {
     if (saveTimer) save();
@@ -714,88 +834,86 @@ export async function viewRankingEditor(id) {
   const itemsBox = $('#items');
 
   function statusBlock(it) {
-    if (it.status === 'downloading') return '<div class="row small"><div class="spinner" style="width:18px;height:18px;border-width:2px"></div>Downloading from link…</div>';
-    if (it.status === 'processing' || it.status === 'analyzing') return '<div class="row small"><div class="spinner" style="width:18px;height:18px;border-width:2px"></div>Analyzing for the best moment…</div>';
-    if (it.status === 'error') return `<div class="banner err small"><div>${esc(it.error || 'Something went wrong.')}</div></div>`;
+    if (it.status === 'downloading') return '<div class="rc-status"><div class="spinner sm"></div>Downloading from the link…</div>';
+    if (it.status === 'processing' || it.status === 'analyzing') return '<div class="rc-status"><div class="spinner sm"></div>Finding the best moment…</div>';
+    if (it.status === 'error') return `<div class="banner err small"><div><b>Couldn't use this video.</b> ${esc(it.error || 'Something went wrong.')} Remove it and try another link, or upload the file.</div></div>`;
     return `
       <div class="trim">
-        <div class="trim-top"><span class="label">Trim</span><span class="small" data-info></span><span data-mode class="badge"></span></div>
+        <div class="trim-top"><span class="label">Trim</span><span data-mode class="badge"></span><span class="hint" data-info></span></div>
         <div class="moment" data-moment="${it.id}" title="Drag the yellow edges to trim · drag the middle to move · click elsewhere to jump the video there">
           <div class="bars"></div>
           <div class="win"><div class="h l" title="Drag to set the start"></div><div class="h r" title="Drag to set the end"></div></div>
           <div class="ph"></div>
         </div>
         <div class="trim-row">
-          <label class="tfield">Start<input type="text" data-ts="start" /></label>
-          <button class="btn sm" data-act="setStart" title="Start at the frame showing in the video">⇤ Start here</button>
-          <label class="tfield">End<input type="text" data-ts="end" /></label>
-          <button class="btn sm" data-act="setEnd" title="End at the frame showing in the video">End here ⇥</button>
+          <div class="tpair"><label class="tfield">Start<input type="text" data-ts="start" /></label><button class="btn sm ghost" data-act="setStart" title="Start at the frame showing in the video">⇤ here</button></div>
+          <div class="tpair"><label class="tfield">End<input type="text" data-ts="end" /></label><button class="btn sm ghost" data-act="setEnd" title="End at the frame showing in the video">here ⇥</button></div>
+          <span class="grow"></span>
+          <button class="btn sm" data-act="playTrim" title="Play just the trimmed part">▶ Play trim</button>
+          <button class="btn sm ghost" data-act="whole" title="Use the whole clip">⤢ Whole</button>
+          <button class="btn sm ghost" data-act="auto" title="Let ShortsForge pick the best moment again">↺ Auto</button>
         </div>
-        <div class="trim-row">
-          <button class="btn sm" data-act="playTrim">▶ Play trimmed part</button>
-          <button class="btn sm" data-act="whole">⤢ Whole clip</button>
-          <button class="btn sm" data-act="auto">↺ Auto-pick best moment</button>
-          <button class="btn sm ghost" data-act="play">📱 Play in phone preview</button>
-        </div>
-        ${it.ai?.reason ? `<span class="small" style="color:#a9c0ff">🤖 AI saw: ${esc(it.ai.reason)} (payoff at ${fmtTime(it.ai.peak, true)})</span>` : ''}
+        ${it.ai?.reason ? `<span class="hint" style="color:#5b3fd9">🤖 AI saw: ${esc(it.ai.reason)} (payoff at ${fmtTime(it.ai.peak, true)})</span>` : ''}
       </div>`;
   }
 
   function itemCard(it, i) {
     const n = R.items.length;
+    const plain = plainText(it.label);
+    const src = it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noreferrer" title="${esc(it.url)}">${esc(new URL(it.url).hostname.replace(/^www\./, ''))} ↗</a>` : esc(it.sourceName || '');
     return `
       <div class="rank-card ${ui.collapsed.has(it.id) ? 'collapsed' : ''}" data-id="${it.id}">
         <div class="rc-head" data-act="collapse">
+          <span class="grip" draggable="true" title="Drag to reorder">⋮⋮</span>
           <div class="num">${i + 1}</div>
-          <div class="name">Video Rank ${i + 1}${plainText(it.label) ? ` <span class="muted" style="font-weight:450">· ${esc(plainText(it.label))}</span>` : ''}</div>
-          <button class="icon-btn" data-act="up" title="Move up" ${i === 0 ? 'disabled' : ''}>${I.up}</button>
-          <button class="icon-btn" data-act="down" title="Move down" ${i === n - 1 ? 'disabled' : ''}>${I.down}</button>
-          <button class="icon-btn" data-act="dup" title="Duplicate this rank" ${n >= MAX || it.status !== 'ready' ? 'disabled' : ''}>${I.copy}</button>
-          <button class="icon-btn" data-act="del" title="Remove">${I.trash}</button>
+          <div class="name">${plain ? esc(plain) : `<span class="muted">Rank #${i + 1}, no label yet</span>`}</div>
+          ${it.status === 'ready' ? `<span class="chip">${itemLength(it).toFixed(1)}s</span>` : ''}
+          <span class="rc-actions">
+            <button class="icon-btn" data-act="up" title="Move up (better rank)" ${i === 0 ? 'disabled' : ''}>${I.up}</button>
+            <button class="icon-btn" data-act="down" title="Move down" ${i === n - 1 ? 'disabled' : ''}>${I.down}</button>
+            <button class="icon-btn" data-act="dup" title="Duplicate" ${n >= MAX || it.status !== 'ready' ? 'disabled' : ''}>${I.copy}</button>
+            <button class="icon-btn danger" data-act="del" title="Remove">${I.trash}</button>
+          </span>
+          <span class="chev">${I.chevron}</span>
         </div>
         <div class="rc-body">
           <div class="rc-vid-wrap">
-            <div class="rc-vid">${it.status === 'ready' ? `<video data-vid="${it.id}" src="/files/${id}/${it.file}" preload="metadata" playsinline title="Click to play / pause"></video><div class="vid-play">▶</div>` : ''}</div>
+            <div class="rc-vid">${it.status === 'ready' ? `<video data-vid="${it.id}" src="/files/${id}/${it.file}" preload="metadata" playsinline title="Click to play / pause"></video><div class="vid-play">▶</div>` : '<div class="rc-vid-empty"></div>'}</div>
             ${it.status === 'ready' ? `<div class="vid-time" data-vtime="${it.id}">0:00.0</div>` : ''}
           </div>
           <div class="rc-fields">
-            <div class="two" style="grid-template-columns:1fr 120px">
-              <div class="field">Label next to #${i + 1} <span class="hint">· select words to color them</span><div class="rich" data-label="${it.id}"></div></div>
-              <label class="field">Rank<select data-rank="${it.id}">${R.items.map((_, k) => `<option value="${k}" ${k === i ? 'selected' : ''}>#${k + 1}</option>`).join('')}</select></label>
-            </div>
-            <div class="row" style="gap:10px;flex-wrap:wrap">
-              ${paletteHTML(`label:${it.id}`, it.color || R.ranks.labelColor)}
+            <div class="rich label-box" data-label="${it.id}"></div>
+            <div class="label-tools">
+              ${colorBtn(`label:${it.id}`, it.color || R.ranks.labelColor, 'Color')}
               ${emojiButton(`label:${it.id}`)}
-              <select data-font="${it.id}" style="width:auto;padding:6px 10px;font-size:13px" title="Font for this rank's label"><option value="">Font: same as list</option>${fonts.map((f) => `<option value="${esc(f.family)}" ${f.family === it.font ? 'selected' : ''}>${esc(f.family)}</option>`).join('')}</select>
+              <select data-font="${it.id}" class="mini-select" title="Font for this label"><option value="">Font: same as list</option>${fonts.map((f) => `<option value="${esc(f.family)}" ${f.family === it.font ? 'selected' : ''}>${esc(f.family)}</option>`).join('')}</select>
+              <span class="grow"></span>
+              <span class="hint src">${src}${it.duration ? ` · ${fmtTime(it.duration)}` : ''}</span>
             </div>
             ${statusBlock(it)}
-            <span class="muted small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Source: ${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noreferrer">${esc(it.url)}</a>` : esc(it.sourceName || '')}${it.duration ? ` · ${fmtTime(it.duration)}` : ''}</span>
           </div>
         </div>
       </div>`;
   }
 
   function addCard(n) {
+    const empty = n === 0;
     return `
-      <div class="rank-card add">
-        <div class="rc-head"><div class="num">${n + 1}</div><div class="name">Add Video Rank ${n + 1}</div><span class="muted small">${n}/${MAX} videos</span></div>
-        <div class="rc-body" style="flex-direction:column;gap:12px">
-          <span class="label">Video Link</span>
-          <div class="link-row">
-            <div class="input-box"><input type="text" id="linkIn" placeholder="Paste TikTok, Instagram, or YouTube video link" /></div>
-            <button class="go-btn" id="linkGo" title="Add">${I.arrow}</button>
-          </div>
-          <div class="or">or</div>
-          <div class="row"><button class="btn" id="uploadBtn">⬆ Upload videos</button><span class="muted small">Pick several at once; they're added as the next ranks in order. Paste several links (one per line) to add them all.</span><input type="file" id="uploadIn" accept="video/*" multiple hidden /></div>
-          <div id="upState"></div>
+      <div class="add-zone ${empty ? 'big' : ''}" id="addZone">
+        ${empty ? '<div class="add-ic">🎬</div><h3>Add the videos you want to rank</h3><p class="muted">Paste TikTok, YouTube or Instagram links, or drop video files here. The first one you add becomes #1.</p>' : `<div class="add-title"><b>Add rank #${n + 1}</b><span class="muted small">${n}/${MAX} videos</span></div>`}
+        <div class="link-row">
+          <div class="input-box"><input type="text" id="linkIn" placeholder="Paste a TikTok, YouTube or Instagram link (or several, one per line)" /></div>
+          <button class="go-btn" id="linkGo" title="Add">${I.arrow}</button>
         </div>
+        <div class="row" style="gap:10px;justify-content:${empty ? 'center' : 'flex-start'}"><button class="btn sm" id="uploadBtn">⬆ Upload video files</button><span class="muted small">or drag files onto this page</span><input type="file" id="uploadIn" accept="video/*" multiple hidden /></div>
+        <div id="upState"></div>
       </div>`;
   }
 
   function renderItems() {
     const active = document.activeElement;
     const focusLabel = active?.dataset?.label;
-    itemsBox.innerHTML = R.items.map(itemCard).join('') + (R.items.length < MAX ? addCard(R.items.length) : `<div class="muted small" style="text-align:center">Maximum of ${MAX} videos reached.</div>`);
+    itemsBox.innerHTML = R.items.map(itemCard).join('') + (R.items.length < MAX ? addCard(R.items.length) : `<div class="hint" style="text-align:center">That's the maximum of ${MAX} videos. Remove one to add another.</div>`);
     R.items.forEach(updateMoment);
     // Each label is a colorable text box.
     for (const it of R.items) {
@@ -813,7 +931,7 @@ export async function viewRankingEditor(id) {
           cur.label = markup;
           const name = $(`[data-id="${it.id}"] .name`);
           const plain = plainText(markup);
-          name.innerHTML = `Video Rank ${R.items.indexOf(cur) + 1}${plain ? ` <span class="muted" style="font-weight:450">· ${esc(plain)}</span>` : ''}`;
+          name.innerHTML = plain ? esc(plain) : `<span class="muted">Rank #${R.items.indexOf(cur) + 1}, no label yet</span>`;
           drawPreview();
           scheduleSave();
           recordHistory();
@@ -822,6 +940,8 @@ export async function viewRankingEditor(id) {
     }
     wireRankVideos();
     $('#removeAll').hidden = !R.items.length;
+    $('#videoCount').textContent = R.items.length ? `${R.items.length}/${MAX}` : '';
+    wireCardDrag();
     $$('.palette', itemsBox).forEach((pal) => syncPalette(pal, paletteColor(pal.dataset.target)));
     if (focusLabel) {
       // Put the caret back at the end of the label being typed in.
@@ -836,6 +956,70 @@ export async function viewRankingEditor(id) {
       }
     }
   }
+
+  // ---------- Drag to reorder (grab the ⋮⋮ handle) ----------
+
+  let draggingId = null;
+  function wireCardDrag() {
+    $$('.rank-card[data-id] .grip', itemsBox).forEach((grip) => {
+      const card = grip.closest('.rank-card');
+      grip.addEventListener('dragstart', (e) => {
+        draggingId = card.dataset.id;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', draggingId);
+        e.dataTransfer.setDragImage(card, 30, 30);
+        setTimeout(() => card.classList.add('dragging'));
+      });
+      grip.addEventListener('dragend', () => {
+        draggingId = null;
+        $$('.rank-card', itemsBox).forEach((c) => c.classList.remove('dragging', 'drop-before', 'drop-after'));
+      });
+    });
+  }
+  itemsBox.addEventListener('dragover', (e) => {
+    if (!draggingId) return;
+    const card = e.target.closest('.rank-card[data-id]');
+    if (!card || card.dataset.id === draggingId) return;
+    e.preventDefault();
+    const r = card.getBoundingClientRect();
+    const after = e.clientY > r.top + r.height / 2;
+    $$('.rank-card', itemsBox).forEach((c) => c.classList.remove('drop-before', 'drop-after'));
+    card.classList.add(after ? 'drop-after' : 'drop-before');
+  });
+  itemsBox.addEventListener('drop', (e) => {
+    if (!draggingId) return;
+    const card = e.target.closest('.rank-card[data-id]');
+    if (!card) return;
+    e.preventDefault();
+    const from = R.items.findIndex((x) => x.id === draggingId);
+    let to = R.items.findIndex((x) => x.id === card.dataset.id);
+    if (card.classList.contains('drop-after')) to += 1;
+    if (from < to) to -= 1;
+    draggingId = null;
+    move(from, Math.max(0, Math.min(R.items.length - 1, to)));
+  });
+
+  // ---------- Drop video files anywhere on the editor ----------
+
+  const rkEl = $('.rk');
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  rkEl.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    rkEl.classList.add('drop-files');
+  });
+  rkEl.addEventListener('dragleave', (e) => {
+    if (e.target === rkEl || !rkEl.contains(e.relatedTarget)) rkEl.classList.remove('drop-files');
+  });
+  rkEl.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    rkEl.classList.remove('drop-files');
+    const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('video/') || /\.(mp4|mov|webm|mkv|m4v)$/i.test(f.name));
+    if (!files.length) return toast('Drop video files (MP4, MOV, WebM).', true);
+    showSection('videos');
+    uploadFiles(files);
+  });
 
   function updateMoment(it) {
     const box = $(`[data-moment="${it.id}"]`);
@@ -862,7 +1046,9 @@ export async function viewRankingEditor(id) {
     win.style.left = `${(it.trimStart / it.duration) * 100}%`;
     win.style.width = `${((it.trimEnd - it.trimStart) / it.duration) * 100}%`;
     const card = box.closest('.rank-card');
-    $('[data-info]', card).textContent = `${itemLength(it).toFixed(1)}s of ${it.duration.toFixed(1)}s`;
+    $('[data-info]', card).textContent = `using ${itemLength(it).toFixed(1)}s of ${it.duration.toFixed(1)}s`;
+    const chip = $('.rc-head .chip', card);
+    if (chip) chip.textContent = `${itemLength(it).toFixed(1)}s`;
     const mode = $('[data-mode]', card);
     const auto = it.auto !== false;
     mode.textContent = auto ? '✨ Auto best moment' : '✋ Trimmed by you';
@@ -946,7 +1132,7 @@ export async function viewRankingEditor(id) {
     if (e.target.closest('#uploadBtn')) return $('#uploadIn').click();
     if (!act || idx < 0) return;
     if (act === 'collapse') {
-      if (e.target.closest('button')) return;
+      if (e.target.closest('button, .grip, select, a')) return;
       ui.collapsed.has(itemId) ? ui.collapsed.delete(itemId) : ui.collapsed.add(itemId);
       card.classList.toggle('collapsed');
     } else if (act === 'up') move(idx, idx - 1);
@@ -1388,6 +1574,7 @@ export async function viewRankingEditor(id) {
 
   function renderTabs() {
     $$('.pv-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === ui.tab));
+    $('#finalDot').hidden = !P.output;
     $('#tabPreview').hidden = ui.tab !== 'preview';
     const fin = $('#tabFinal');
     fin.hidden = ui.tab !== 'final';
@@ -1416,13 +1603,21 @@ export async function viewRankingEditor(id) {
     const busy = BUSY_PROJECT.includes(P.status);
     const waiting = R.items.some((i) => BUSY_ITEM.includes(i.status));
     const failed = R.items.some((i) => i.status === 'error');
-    const summary = `${R.items.length} video${R.items.length === 1 ? '' : 's'} · ${fmtTime(total)} total`;
+    const unlabeled = R.items.filter((i) => i.status === 'ready' && !plainText(i.label).trim()).length;
+    // One clear status line: the blocking problem first, then gentle hints, then the summary.
+    let status;
+    if (!R.items.length) status = '<span class="st muted">Add videos to get started</span>';
+    else if (failed) status = '<span class="st err">⚠ A video failed. Remove it to generate.</span>';
+    else if (waiting) status = '<span class="st warn"><span class="spinner xs"></span> Preparing videos…</span>';
+    else if (unlabeled) status = `<span class="st warn">${unlabeled} rank${unlabeled > 1 ? 's have' : ' has'} no label <button class="link-btn" data-section="videos">add labels</button></span>`;
+    else status = '<span class="st ok">✓ Ready to generate</span>';
+    const summary = R.items.length ? `<span class="muted small">${R.items.length} video${R.items.length === 1 ? '' : 's'} · ${fmtTime(total)}</span>` : '';
     bar.innerHTML = busy
-      ? `<b class="small" style="white-space:nowrap">${esc(P.step || 'Rendering')}…</b><div class="progress"><div style="width:${P.progress || 0}%"></div></div><span class="muted small">${P.progress || 0}%</span>`
-      : `<span class="muted small">${summary}${waiting ? ' · waiting for videos…' : ''}${failed ? ' · remove failed videos to render' : ''}</span>
+      ? `<div class="spinner xs"></div><b class="small" style="white-space:nowrap">${esc(P.step || 'Rendering')}…</b><div class="progress"><div style="width:${P.progress || 0}%"></div></div><span class="muted small">${P.progress || 0}% · you can keep editing</span>`
+      : `${status}${summary}
          <span style="flex:1"></span>
-         ${P.output ? `<a class="btn" href="/files/${id}/${P.output.file}?download=1">⬇ Download</a>` : ''}
-         <button class="btn primary" id="renderBtn" ${!ready.length || waiting || failed ? 'disabled' : ''}>✨ ${P.output ? 'Re-generate video' : 'Generate video'}</button>`;
+         ${P.output ? `<a class="btn" href="/files/${id}/${P.output.file}?download=1">⬇ Download last render</a>` : ''}
+         <button class="btn primary big-cta" id="renderBtn" title="Ctrl+Enter" ${!ready.length || waiting || failed ? 'disabled' : ''}>✨ ${P.output ? 'Generate again' : 'Generate video'}</button>`;
     $('#renderBtn')?.addEventListener('click', async () => {
       await save();
       try {
@@ -1462,6 +1657,8 @@ export async function viewRankingEditor(id) {
   renderItems();
   renderBar();
   renderTabs();
+  showSection(section);
+  setSaveState('saved');
   // Fonts load asynchronously; redraw once they're in so the preview metrics are right.
   document.fonts.ready.then(drawPreview);
   drawPreview();

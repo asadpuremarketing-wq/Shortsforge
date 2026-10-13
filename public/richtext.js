@@ -66,7 +66,7 @@ document.addEventListener('selectionchange', () => {
   if (ed) saved = { el: ed, range: r.cloneRange() };
 });
 document.addEventListener('mousedown', (e) => {
-  if (!e.target.closest?.('[data-rich], .palette, .emoji-pop, [data-emoji-for]')) saved = null;
+  if (!e.target.closest?.('[data-rich], .palette, .emoji-pop, [data-emoji-for], .color-pop, [data-color-for]')) saved = null;
 });
 
 /** Turn `el` into a colorable text box. onChange(markup) fires on every edit. */

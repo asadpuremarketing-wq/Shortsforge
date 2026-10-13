@@ -128,27 +128,47 @@ function projectCard(p) {
 
 async function viewHome() {
   const projects = await api('GET', '/api/projects');
+  const rankings = projects.filter((p) => p.type === 'ranking');
+  const others = TOOLS.filter((t) => t.key !== 'ranking');
   app.innerHTML = `
-    <div class="stack" style="gap:28px">
-      <div class="stack" style="gap:6px">
-        <h1>What are you creating today?</h1>
-        <span class="muted">Pick a tool to get started. Everything runs on your computer.</span>
-      </div>
-      <div class="tool-grid">
-        ${TOOLS.map(
-          (t) => `
-          <a class="tool-card ${t.soon ? 'soon' : ''}" ${t.href ? `href="${t.href}"` : ''}>
-            <div class="spread"><div class="ic">${svg(t.icon)}</div>${t.soon ? '<span class="badge">Coming soon</span>' : t.key === 'ranking' ? '<span class="badge blue">New</span>' : ''}</div>
-            <b>${t.name}</b><span>${t.desc}</span>
-          </a>`,
-        ).join('')}
-      </div>
+    <div class="stack" style="gap:30px">
+      <section class="home-hero">
+        <div class="stack" style="gap:10px;max-width:560px">
+          <span class="badge blue" style="align-self:flex-start">Video Ranking</span>
+          <h1>Make a ranking video in minutes</h1>
+          <p class="muted" style="margin:0;font-size:16px">Paste up to 7 TikTok or YouTube links, put them in order, and ShortsForge trims the best moments, adds your title and rank list, and renders a ready-to-post Short.</p>
+          <div class="row" style="margin-top:6px"><button class="btn primary big" id="homeNew">＋ New ranking video</button>${rankings.length ? '<a class="btn" href="#/ranking">See all rankings</a>' : ''}</div>
+        </div>
+        <ol class="home-steps">
+          <li><b>Add videos</b><span>Links or files, ranked #1 to #7</span></li>
+          <li><b>Style it</b><span>Title, colors, emoji, effects</span></li>
+          <li><b>Generate</b><span>1080×1920 MP4, ready for YouTube</span></li>
+        </ol>
+      </section>
       ${
         projects.length
-          ? `<div class="stack"><div class="spread"><h2>Recent</h2><a href="#/library" class="muted small">View all →</a></div><div class="project-list">${projects.slice(0, 6).map(projectCard).join('')}</div></div>`
+          ? `<section class="stack"><div class="spread"><h2>Continue where you left off</h2><a href="#/library" class="muted small">Library →</a></div><div class="project-list">${projects.slice(0, 4).map(projectCard).join('')}</div></section>`
           : ''
       }
+      <section class="stack">
+        <h2>More tools</h2>
+        <div class="tool-grid compact">
+          ${others
+            .map(
+              (t) => `
+            <a class="tool-card ${t.soon ? 'soon' : ''}" ${t.href ? `href="${t.href}"` : ''}>
+              <div class="row" style="gap:12px;flex-wrap:nowrap"><div class="ic">${svg(t.icon)}</div><b>${t.name}</b></div>
+              <span>${t.desc}</span>
+            </a>`,
+            )
+            .join('')}
+        </div>
+      </section>
     </div>`;
+  $('#homeNew').addEventListener('click', async () => {
+    const p = await api('POST', '/api/rankings', { name: 'Untitled ranking' });
+    location.hash = `#/ranking/${p.id}`;
+  });
 }
 
 // ---------- Library ----------
