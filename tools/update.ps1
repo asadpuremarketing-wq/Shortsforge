@@ -16,6 +16,7 @@ function Finish([bool]$Updated) {
   if ($Interactive) {
     Write-Host ''
     Read-Host 'Press Enter to close' | Out-Null
+    exit 0  # don't print the True/False result in the window
   }
   return $Updated
 }
