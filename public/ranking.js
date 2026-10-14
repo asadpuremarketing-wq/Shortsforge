@@ -1,7 +1,7 @@
 // Video Ranking: rank up to 7 videos into one countdown video with a live phone preview.
-import { $, $$, app, esc, fmtTime, api, toast, getStatus, getVoices, voiceOptions, onCleanup, poll } from './core.js';
+import { $, $$, app, esc, fmtTime, api, toast, getStatus, getVoices, voiceOptions, onCleanup, poll, confirmDialog } from './core.js';
 import { icon } from './icons.js';
-import { posterCard, newTile } from './cards.js';
+import { posterCard, newTile, deleteProjects } from './cards.js';
 import { makeRich, setRich, colorSelection, serialize, richHTML, plainText, paletteHTML, syncPalette, insertAtCaret, EMOJIS } from './richtext.js';
 
 const DEFAULT_EXTRAS = { rankPop: true, transition: 'flash', sfx: true, announce: false, announceVoice: '', musicVolume: 0.15, watermark: '', markColor: '#ffffff', endText: '', endColor: '#ffffff', endDuration: 2.5 };
@@ -146,6 +146,7 @@ export async function viewRankingEditor(id) {
           <div class="row" style="gap:6px">
             <div class="tgroup"><button class="tbtn" id="undoBtn" title="Undo (Ctrl+Z)">${icon('undo', 17)}</button><button class="tbtn" id="redoBtn" title="Redo (Ctrl+Y)">${icon('redo', 17)}</button></div>
             <button class="btn sm" id="newStyle" title="Start a new ranking with this title style, rank style, effects and music">${icon('plus', 16)} New with this style</button>
+            <button class="btn sm ghost icon-only danger-ghost" id="deleteProject" title="Delete this ranking">${icon('trash', 17)}</button>
           </div>
         </div>
         <nav class="rk-tabs" id="rkTabs">${TABS.map(([k, ic, name]) => `<button data-section="${k}">${icon(ic, 17)}${name}${k === 'videos' ? ' <span class="count" id="videoCount"></span>' : ''}</button>`).join('')}</nav>
@@ -609,8 +610,15 @@ export async function viewRankingEditor(id) {
       R.title.align = t.dataset.align;
       changed();
     } else if (t.id === 'removeAll') {
-      if (!confirm(`Remove all ${R.items.length} videos from this ranking? Your title, colors and other settings are kept.`)) return;
-      saving.then(() => api('DELETE', `/api/rankings/${id}/items`)).then(merge).catch((err) => toast(err.message, true));
+      confirmDialog({ title: `Remove all ${R.items.length} videos?`, body: 'The clips are removed from this ranking. Your title, colors, effects and other settings are kept.', confirmLabel: 'Remove all videos' }).then((ok) => {
+        if (ok) saving.then(() => api('DELETE', `/api/rankings/${id}/items`)).then(merge).catch((err) => toast(err.message, true));
+      });
+    } else if (t.id === 'deleteProject') {
+      clearTimeout(saveTimer);
+      saveTimer = null; // don't autosave a project that's about to be deleted
+      saving.then(() => deleteProjects([{ id, name: P.name || 'Untitled ranking' }])).then((gone) => {
+        if (gone.length) location.hash = '#/ranking';
+      });
     } else if (t.id === 'bgNone') {
       R.title.bg = '';
       changed();
@@ -1140,7 +1148,8 @@ export async function viewRankingEditor(id) {
     } else if (act === 'up') move(idx, idx - 1);
     else if (act === 'down') move(idx, idx + 1);
     else if (act === 'del') {
-      if (!confirm(`Remove rank #${idx + 1}?`)) return;
+      const label = plainText(R.items[idx].label).trim();
+      if (!(await confirmDialog({ title: `Remove rank #${idx + 1}${label ? ` (${label})` : ''}?`, body: 'This removes the clip from the ranking. The ranks below it move up one place.', confirmLabel: 'Remove' }))) return;
       await saving;
       try {
         merge(await api('DELETE', `/api/rankings/${id}/items/${itemId}`));

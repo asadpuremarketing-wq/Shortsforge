@@ -144,3 +144,38 @@ export async function openYouTubeUpload({ projectId, file, title }) {
   });
   dlg.showModal();
 }
+
+// ---------- Confirmation dialog (replaces the browser's confirm()) ----------
+
+/**
+ * Ask before doing something destructive. Resolves true when confirmed.
+ * confirmDialog({ title, body, confirmLabel = 'Delete', danger = true })
+ */
+export function confirmDialog({ title, body = '', confirmLabel = 'Delete', danger = true }) {
+  return new Promise((resolve) => {
+    const dlg = document.createElement('dialog');
+    dlg.className = 'confirm-dialog';
+    dlg.innerHTML = `
+      <div class="cd-icon ${danger ? 'danger' : ''}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/></svg></div>
+      <h3>${esc(title)}</h3>
+      ${body ? `<p>${body}</p>` : ''}
+      <div class="cd-actions"><button class="btn cd-cancel" value="cancel">Cancel</button><button class="btn ${danger ? 'danger-solid' : 'primary'} cd-confirm" value="ok">${esc(confirmLabel)}</button></div>`;
+    document.body.appendChild(dlg);
+    const done = (ok) => {
+      dlg.close();
+      dlg.remove();
+      resolve(ok);
+    };
+    dlg.querySelector('.cd-cancel').addEventListener('click', () => done(false));
+    dlg.querySelector('.cd-confirm').addEventListener('click', () => done(true));
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      done(false);
+    });
+    dlg.addEventListener('click', (e) => {
+      if (e.target === dlg) done(false); // click on the backdrop
+    });
+    dlg.showModal();
+    dlg.querySelector('.cd-cancel').focus();
+  });
+}

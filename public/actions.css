@@ -1,0 +1,47 @@
+/* =========================================================
+   Delete / select actions and the confirmation dialog.
+   ========================================================= */
+
+/* Destructive buttons */
+.btn.danger-solid { background: linear-gradient(180deg, #ef4444, #dc2626); color: #fff; border: 0; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 6px 16px rgba(220, 38, 38, 0.28); }
+.btn.danger-solid:hover:not(:disabled) { filter: brightness(1.05); }
+.btn.danger-solid:disabled { opacity: 0.4; box-shadow: none; }
+.btn.danger-ghost { color: #94a3b8; }
+.btn.danger-ghost:hover { color: var(--err); background: #fef2f2; }
+
+/* Confirmation dialog */
+.confirm-dialog { width: min(420px, 92vw); padding: 28px 28px 22px; border: 1px solid var(--line); border-radius: 22px; background: #fff; color: var(--text); box-shadow: var(--shadow-lg); text-align: center; }
+.confirm-dialog::backdrop { background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(4px); }
+.confirm-dialog[open] { animation: cd-in 0.18s ease-out; }
+@keyframes cd-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+.cd-icon { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 16px; background: var(--accent-soft); color: var(--accent); }
+.cd-icon.danger { background: #fef2f2; color: #dc2626; box-shadow: 0 0 0 6px #fff5f5; }
+.confirm-dialog h3 { margin: 0 0 8px; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; text-transform: none; color: var(--text); word-break: break-word; }
+.confirm-dialog p { margin: 0 0 22px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.cd-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* Card delete button + select checkbox */
+.poster-card { position: relative; }
+.poster-card.removing { animation: card-out 0.25s ease-in forwards; }
+@keyframes card-out { to { opacity: 0; transform: scale(0.94); } }
+.poster-del { position: absolute; top: 10px; right: 10px; z-index: 3; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 10px; background: rgba(255, 255, 255, 0.94); color: #475569; cursor: pointer; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15); opacity: 0; transform: scale(0.9); transition: opacity 0.15s, transform 0.15s, color 0.15s, background 0.15s; }
+.poster-card:hover .poster-del, .poster-del:focus-visible { opacity: 1; transform: none; }
+.poster-del:hover { background: #fef2f2; color: #dc2626; }
+.poster-check { position: absolute; top: 10px; right: 10px; z-index: 4; display: none; cursor: pointer; }
+.poster-check input { position: absolute; opacity: 0; pointer-events: none; }
+.poster-check span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: rgba(255, 255, 255, 0.95); border: 2px solid #cbd2e1; color: transparent; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15); }
+.poster-check input:checked + span { background: var(--grad); border-color: transparent; color: #fff; }
+.gallery.selecting .poster-check { display: block; }
+.gallery.selecting .poster-del, .gallery.selecting .poster-open { display: none; }
+.gallery.selecting .poster-card[data-project] .poster { cursor: pointer; }
+.gallery.selecting .poster-card:has(input:checked) .poster { outline: 3px solid var(--accent); outline-offset: 2px; }
+#selectMode.on { background: var(--text); color: #fff; border-color: var(--text); }
+
+/* Floating selection bar */
+.select-bar { position: fixed; left: 50%; bottom: 24px; z-index: 40; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; width: min(560px, calc(100vw - 300px)); padding: 10px 12px 10px 18px; border-radius: 16px; background: #0f172a; color: #fff; box-shadow: var(--shadow-lg); animation: cd-in 0.18s ease-out; }
+.select-bar #selCount { font-weight: 700; }
+.select-bar .btn.ghost, .select-bar .btn:not(.danger-solid) { background: rgba(255, 255, 255, 0.1); color: #fff; border-color: transparent; box-shadow: none; }
+.select-bar .btn:not(.danger-solid):hover { background: rgba(255, 255, 255, 0.18); }
+
+/* Toasts sit bottom-right so they never cover the selection or generate bars */
+.toast { left: auto; right: 24px; bottom: 24px; transform: none; max-width: 420px; }

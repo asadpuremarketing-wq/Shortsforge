@@ -1,7 +1,7 @@
 // ShortsForge front end: sidebar shell + hash router.
-import { $, $$, app, esc, fmtTime, api, toast, getVoices, voiceOptions, runCleanups, poll, openYouTubeUpload } from './core.js';
+import { $, $$, app, esc, fmtTime, api, toast, getVoices, voiceOptions, runCleanups, poll, openYouTubeUpload, onCleanup } from './core.js';
 import { icon } from './icons.js';
-import { posterCard, projectHref } from './cards.js';
+import { posterCard, projectHref, deleteProjects } from './cards.js';
 import { viewCreate, viewProject, viewEditor, STATUS_PILL } from './clips.js';
 import { viewSettings } from './settings.js';
 import { viewRankingHome, viewRankingEditor } from './ranking.js';
@@ -95,6 +95,15 @@ async function route() {
 }
 window.addEventListener('hashchange', route);
 
+// Any project card's trash button deletes that project (after a confirmation dialog).
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-del-project]');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  await deleteProjects([{ id: b.dataset.delProject, name: b.dataset.name }]);
+});
+
 // Any button with data-yt-project/file/title opens the YouTube upload dialog.
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-yt-project]');
@@ -177,10 +186,72 @@ async function viewLibrary() {
   app.innerHTML = `
     <header class="page-title">
       <div><h1>Library</h1><p>Everything you've made on this computer.</p></div>
-      <div class="row"><a class="btn" href="#/clipping">${icon('scissors', 16)} Auto Clipping</a><a class="btn primary" href="#/ranking">${icon('plus', 16)} New ranking</a></div>
+      <div class="row"><button class="btn" id="selectMode">${icon('check', 16)} Select</button><a class="btn primary" href="#/ranking">${icon('plus', 16)} New ranking</a></div>
     </header>
     <nav class="chips" id="libFilters"></nav>
-    <div id="libGrid"></div>`;
+    <div id="libGrid"></div>
+    <div class="select-bar" id="selectBar" hidden>
+      <span id="selCount">0 selected</span>
+      <button class="btn sm ghost" id="selAll">Select all</button>
+      <span class="grow"></span>
+      <button class="btn sm" id="selCancel">Cancel</button>
+      <button class="btn sm danger-solid" id="selDelete" disabled>${icon('trash', 15)} Delete</button>
+    </div>`;
+  let selecting = false;
+  const selected = () => [...app.querySelectorAll('[data-sel]:checked')].map((c) => ({ id: c.dataset.sel, name: c.closest('.poster-card').querySelector('.pt').textContent }));
+  const syncSelect = () => {
+    app.querySelector('.gallery')?.classList.toggle('selecting', selecting);
+    $('#selectBar').hidden = !selecting;
+    $('#selectMode').classList.toggle('on', selecting);
+    const n = selected().length;
+    $('#selCount').textContent = `${n} selected`;
+    $('#selDelete').disabled = !n;
+    $('#selDelete').innerHTML = `${icon('trash', 15)} Delete${n ? ` ${n}` : ''}`;
+  };
+  $('#selectMode').addEventListener('click', () => {
+    selecting = !selecting;
+    if (!selecting) app.querySelectorAll('[data-sel]').forEach((c) => (c.checked = false));
+    syncSelect();
+  });
+  $('#selCancel').addEventListener('click', () => {
+    selecting = false;
+    app.querySelectorAll('[data-sel]').forEach((c) => (c.checked = false));
+    syncSelect();
+  });
+  $('#selAll').addEventListener('click', () => {
+    app.querySelectorAll('[data-sel]').forEach((c) => (c.checked = true));
+    syncSelect();
+  });
+  const onSelChange = (e) => {
+    if (e.target.matches?.('[data-sel]')) syncSelect();
+  };
+  app.addEventListener('change', onSelChange);
+  $('#selDelete').addEventListener('click', async () => {
+    const gone = await deleteProjects(selected());
+    if (gone.length) {
+      projects = projects.filter((p) => !gone.includes(p.id));
+      selecting = false;
+      setTimeout(() => {
+        draw();
+        syncSelect();
+      }, 280);
+    }
+  });
+  // In select mode, clicking a card toggles it instead of opening it.
+  const onSelClick = (e) => {
+    if (!selecting) return;
+    const card = e.target.closest('.poster-card[data-project]');
+    if (!card || e.target.closest('.poster-check, [data-del-project]')) return;
+    e.preventDefault();
+    const box = card.querySelector('[data-sel]');
+    box.checked = !box.checked;
+    syncSelect();
+  };
+  app.addEventListener('click', onSelClick);
+  onCleanup(() => {
+    app.removeEventListener('change', onSelChange);
+    app.removeEventListener('click', onSelClick);
+  });
   $('#libFilters').addEventListener('click', (e) => {
     const b = e.target.closest('[data-f]');
     if (!b) return;

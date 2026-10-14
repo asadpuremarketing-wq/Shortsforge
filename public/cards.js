@@ -1,5 +1,5 @@
 // Gallery cards for projects (Home, Library, Video Ranking landing).
-import { esc, fmtTime } from './core.js';
+import { esc, fmtTime, api, toast, confirmDialog } from './core.js';
 import { icon } from './icons.js';
 
 export function projectHref(p) {
@@ -45,13 +45,15 @@ export function posterCard(p, { action = '' } = {}) {
   const [label, cls] = statusOf(p);
   const dur = p.output?.duration ? fmtTime(p.output.duration) : '';
   return `
-    <article class="poster-card">
+    <article class="poster-card" data-project="${p.id}">
       <a class="poster" href="${href}" aria-label="Open ${esc(p.name)}">
         ${thumb ? `<img src="${thumb}" alt="" loading="lazy" />` : `<div class="poster-ph">${icon(TYPE_ICON[p.type || 'clips'] || 'film', 30)}</div>`}
         <span class="st-badge ${cls}">${cls === 'busy' ? '<span class="pulse"></span>' : ''}${label}</span>
         ${dur ? `<span class="dur">${dur}</span>` : ''}
         <span class="poster-open">${icon('eye', 16)} Open</span>
       </a>
+      <button type="button" class="poster-del" data-del-project="${p.id}" data-name="${esc(p.name)}" title="Delete project" aria-label="Delete ${esc(p.name)}">${icon('trash', 16)}</button>
+      <label class="poster-check" title="Select"><input type="checkbox" data-sel="${p.id}" /><span>${icon('check', 14)}</span></label>
       <div class="poster-body">
         <a class="pt" href="${href}">${esc(p.name)}</a>
         <span class="meta">${typeLabel(p)} · ${details(p)} · ${shortDate(p.updatedAt || p.createdAt)}</span>
@@ -70,4 +72,35 @@ export function newTile(label, id, sub = '') {
         ${sub ? `<span class="meta">${esc(sub)}</span>` : ''}
       </span>
     </button>`;
+}
+
+/**
+ * Delete projects after confirming. list: [{ id, name }]. Removes their cards from the page.
+ * Returns the ids that were deleted.
+ */
+export async function deleteProjects(list) {
+  if (!list.length) return [];
+  const one = list.length === 1;
+  const ok = await confirmDialog({
+    title: one ? `Delete "${list[0].name}"?` : `Delete ${list.length} projects?`,
+    body: `This permanently deletes ${one ? 'the project, its videos and the rendered MP4' : 'these projects, their videos and rendered MP4s'} from this computer. Downloaded copies elsewhere aren't affected.`,
+    confirmLabel: one ? 'Delete project' : `Delete ${list.length} projects`,
+  });
+  if (!ok) return [];
+  const deleted = [];
+  for (const { id, name } of list) {
+    try {
+      await api('DELETE', `/api/projects/${id}`);
+      deleted.push(id);
+      const card = document.querySelector(`.poster-card[data-project="${id}"]`);
+      if (card) {
+        card.classList.add('removing');
+        setTimeout(() => card.remove(), 260);
+      }
+    } catch (err) {
+      toast(`Couldn't delete "${name}": ${err.message}`, true);
+    }
+  }
+  if (deleted.length) toast(deleted.length === 1 ? 'Project deleted.' : `${deleted.length} projects deleted.`);
+  return deleted;
 }
