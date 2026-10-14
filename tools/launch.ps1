@@ -76,6 +76,7 @@ if (-not $env:SF_NO_SHORTCUT) {
       $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
       $s.TargetPath = Join-Path $App 'Start ShortsForge.bat'
       $s.WorkingDirectory = $App
+      $s.IconLocation = Join-Path $App 'tools\shortsforge.ico'
       $s.Description = 'Start ShortsForge'
       $s.Save()
       Say 'A ShortsForge shortcut was added to your Desktop.' Green

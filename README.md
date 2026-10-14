@@ -6,13 +6,16 @@ A local, Viblo-style studio for making short vertical videos (YouTube Shorts, Ti
 
 You need a Windows PC. An NVIDIA graphics card makes rendering faster but isn't required.
 
-1. Download **[ShortsForge (ZIP)](https://github.com/asadpuremarketing-wq/Shortsforge/archive/refs/heads/main.zip)** and unzip it somewhere you'll keep it, for example `Documents\ShortsForge`.
-2. Double-click **Start ShortsForge.bat**. The first time, it installs Node.js (if needed) and everything else, which takes a few minutes. Your browser then opens ShortsForge.
+1. Download **[ShortsForge (ZIP)](https://github.com/asadpuremarketing-wq/Shortsforge/archive/refs/heads/main.zip)**, then right-click it and choose **Extract All**.
+2. In the extracted folder, double-click **Install ShortsForge** and click **Yes**.
    - If Windows shows "Windows protected your PC", click **More info → Run anyway**. This appears because the file was downloaded from the internet.
+   - ShortsForge installs to `%LOCALAPPDATA%\Programs\ShortsForge` and adds Desktop and Start menu shortcuts. The first start installs Node.js (if needed) and everything else, which takes a few minutes. Your browser then opens ShortsForge.
 3. Keep the black window open while you work. Close it to stop ShortsForge.
-4. Next time, use the **ShortsForge** shortcut on your Desktop. It's added on the first start.
+4. Next time, open **ShortsForge** from the Desktop or the Start menu. You can delete the ZIP and the extracted folder.
 
 **Getting updates:** automatic. Each time ShortsForge starts, it checks GitHub and installs any new version before opening. Your projects (in the `data` folder) and keys are always kept. (**Update ShortsForge.bat** updates without starting the app.)
+
+**Uninstall:** Settings → Apps → Installed apps → ShortsForge → Uninstall. It asks whether to keep your projects.
 
 New to this? Open **START HERE.txt** in the folder for step-by-step instructions.
 
