@@ -1,0 +1,31 @@
+SHORTSFORGE - HOW TO INSTALL (Windows 10 or 11)
+================================================
+
+1. Put this folder somewhere you'll keep it, for example Documents\ShortsForge.
+   (If you downloaded a ZIP: right-click it > Extract All first.)
+
+2. Double-click "Start ShortsForge.bat".
+   - If Windows says "Windows protected your PC", click More info > Run anyway.
+     This only appears because the file was downloaded from the internet.
+   - The first start installs everything it needs (a few minutes), then
+     ShortsForge opens in your web browser.
+
+3. Keep the black window open while you work. Close it to stop ShortsForge.
+
+4. Next time, use the "ShortsForge" shortcut on your Desktop.
+
+
+UPDATES
+-------
+Nothing to do. Every time you start ShortsForge it checks for a new version
+and installs it automatically. Your projects and settings are always kept.
+
+
+GOOD TO KNOW
+------------
+- Your projects stay on your own computer (in the "data" folder).
+  Don't delete that folder unless you want to lose them.
+- No API keys are needed to make ranking videos. Optional AI features
+  can be turned on in Settings with your own keys.
+- An NVIDIA graphics card makes rendering much faster, but it isn't required.
+- Opens at: http://localhost:5173

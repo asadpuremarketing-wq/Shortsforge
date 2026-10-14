@@ -12,7 +12,9 @@ You need a Windows PC. An NVIDIA graphics card makes rendering faster but isn't 
 3. Keep the black window open while you work. Close it to stop ShortsForge.
 4. Next time, use the **ShortsForge** shortcut on your Desktop. It's added on the first start.
 
-**Getting updates:** close ShortsForge, double-click **Update ShortsForge.bat**, then start it again. Your projects (in the `data` folder) and keys are kept.
+**Getting updates:** automatic. Each time ShortsForge starts, it checks GitHub and installs any new version before opening. Your projects (in the `data` folder) and keys are always kept. (**Update ShortsForge.bat** updates without starting the app.)
+
+New to this? Open **START HERE.txt** in the folder for step-by-step instructions.
 
 Each person's projects stay on their own computer. No API keys are needed for Video Ranking. Optional keys go in **Settings**.
 
