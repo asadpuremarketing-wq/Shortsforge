@@ -1,5 +1,7 @@
 # ShortsForge installer: copies the app to a permanent folder, adds shortcuts and an
-# uninstall entry, then starts it. Run from an unzipped copy, or on its own (it then downloads the app).
+# uninstall entry, then starts it. Run from an unzipped copy, or on its own (it then downloads the app):
+#   irm https://raw.githubusercontent.com/asadpuremarketing-wq/Shortsforge/main/tools/install.ps1 | iex
+# Files PowerShell downloads aren't marked as "from the internet", so Smart App Control doesn't block them.
 $ErrorActionPreference = 'Stop'
 $Repo = 'asadpuremarketing-wq/Shortsforge'
 $Target = if ($env:SF_INSTALL_DIR) { $env:SF_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\ShortsForge' }
@@ -19,8 +21,9 @@ function Fail([string]$Text) {
   exit 1
 }
 
-$Src = Split-Path -Parent $PSScriptRoot
-$fromFolder = Test-Path (Join-Path $Src 'server\index.js')
+# No script folder when run as a pasted one-line command (irm ... | iex): download mode.
+$Src = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { '' }
+$fromFolder = $Src -and (Test-Path (Join-Path $Src 'server\index.js'))
 $sameFolder = $fromFolder -and ((Resolve-Path $Src).Path.TrimEnd('\') -ieq $Target.TrimEnd('\'))
 $installed = Test-Path (Join-Path $Target 'server\index.js')
 

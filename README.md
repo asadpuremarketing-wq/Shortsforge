@@ -13,6 +13,12 @@ You need a Windows PC. An NVIDIA graphics card makes rendering faster but isn't 
 3. Keep the black window open while you work. Close it to stop ShortsForge.
 4. Next time, open **ShortsForge** from the Desktop or the Start menu. You can delete the ZIP and the extracted folder.
 
+**If Windows blocks it** (Smart App Control, or no "Run anyway" button): click Start, type **PowerShell**, open it, paste this line and press Enter. It installs the same way without running any downloaded file:
+
+```
+irm https://raw.githubusercontent.com/asadpuremarketing-wq/Shortsforge/main/tools/install.ps1 | iex
+```
+
 **Getting updates:** automatic. Each time ShortsForge starts, it checks GitHub and installs any new version before opening. Your projects (in the `data` folder) and keys are always kept. (**Update ShortsForge.bat** updates without starting the app.)
 
 **Uninstall:** Settings → Apps → Installed apps → ShortsForge → Uninstall. It asks whether to keep your projects.
