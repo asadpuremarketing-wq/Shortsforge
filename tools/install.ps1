@@ -111,4 +111,5 @@ if (-not $env:SF_NO_SHORTCUT) { try {
 Say 'Installed. Starting ShortsForge...' Green
 
 # ---- 4. Start it (the launcher installs Node.js and packages on the first run) ----
-if (-not $env:SF_SETUP_NO_START) { & (Join-Path $Target 'tools\launch.ps1') }
+# Run as its own PowerShell with Bypass: the default policy blocks .ps1 files, even local ones.
+if (-not $env:SF_SETUP_NO_START) { powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Target 'tools\launch.ps1') }
